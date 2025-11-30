@@ -37,15 +37,10 @@ var rootCmd = &cobra.Command{
 
 		slog.Debug("starting kepr")
 
-		if err := config.EnsureConfigDir(); err != nil {
-			return fmt.Errorf("failed to create config directory: %w", err)
-		}
-		slog.Debug("config directory ensured")
-
-		if err := config.InitViper(); err != nil {
+		if err := config.Init(); err != nil {
 			return fmt.Errorf("failed to initialize config: %w", err)
 		}
-		slog.Debug("viper initialized")
+		slog.Debug("config initialized")
 
 		dependencies := []string{"gpg", "git", "gopass"}
 		for _, tool := range dependencies {
