@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const githubClientID = "client_id_placeholder"
+const githubClientID = "Iv23li6c8kmcEmGBK3yC"
 
 var initCmd = &cobra.Command{
 	Use:   "init [username/repo]",

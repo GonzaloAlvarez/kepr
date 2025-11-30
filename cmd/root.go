@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/spf13/cobra"
@@ -38,17 +37,9 @@ var rootCmd = &cobra.Command{
 		slog.Debug("starting kepr")
 
 		if err := config.Init(); err != nil {
-			return fmt.Errorf("failed to initialize config: %w", err)
+			return fmt.Errorf("failed to initialize: %w", err)
 		}
-		slog.Debug("config initialized")
-
-		dependencies := []string{"gpg", "git", "gopass"}
-		for _, tool := range dependencies {
-			if _, err := exec.LookPath(tool); err != nil {
-				return fmt.Errorf("missing dependency: %s is not installed or in PATH", tool)
-			}
-			slog.Debug("dependency check passed", "tool", tool)
-		}
+		slog.Debug("initialization complete")
 
 		return nil
 	},
