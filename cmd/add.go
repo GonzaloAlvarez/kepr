@@ -19,6 +19,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +37,7 @@ var addCmd = &cobra.Command{
 			return fmt.Errorf("interactive prompt not implemented yet, please provide value argument")
 		}
 
-		fmt.Printf("Adding secret: %s\n", key)
+		cout.Printfln("Adding secret: %s", key)
 		_ = value
 		return nil
 	},

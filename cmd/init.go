@@ -18,8 +18,10 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
+	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/github"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -36,6 +38,7 @@ var initCmd = &cobra.Command{
 
 		token := viper.GetString("github_token")
 		if token == "" {
+			slog.Debug("no token found, starting authentication")
 			var err error
 			token, err = github.Authenticate(githubClientID)
 			if err != nil {
@@ -46,12 +49,13 @@ var initCmd = &cobra.Command{
 				return fmt.Errorf("failed to save token: %w", err)
 			}
 
-			fmt.Println("Authentication successful.")
+			cout.Println("Authentication successful.")
 		} else {
-			fmt.Println("Already authenticated.")
+			slog.Debug("token found, skipping authentication")
+			cout.Println("Already authenticated.")
 		}
 
-		fmt.Printf("Initializing kepr for repo: %s\n", repo)
+		cout.Printfln("Initializing kepr for repo: %s", repo)
 		return nil
 	},
 }

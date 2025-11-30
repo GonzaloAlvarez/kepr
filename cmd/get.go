@@ -17,8 +17,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +27,7 @@ var getCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		key := args[0]
-		fmt.Printf("Getting secret: %s\n", key)
+		cout.Printfln("Getting secret: %s", key)
 		return nil
 	},
 }

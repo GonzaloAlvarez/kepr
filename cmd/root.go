@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 
@@ -25,28 +26,53 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var debugMode bool
+
 var rootCmd = &cobra.Command{
 	Use:          "kepr",
 	Short:        "Encrypted distributed key-value store backed by Git and YubiKey",
 	SilenceUsage: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		initLogging()
+
+		slog.Debug("starting kepr")
+
 		if err := config.EnsureConfigDir(); err != nil {
 			return fmt.Errorf("failed to create config directory: %w", err)
 		}
+		slog.Debug("config directory ensured")
 
 		if err := config.InitViper(); err != nil {
 			return fmt.Errorf("failed to initialize config: %w", err)
 		}
+		slog.Debug("viper initialized")
 
 		dependencies := []string{"gpg", "git", "gopass"}
 		for _, tool := range dependencies {
 			if _, err := exec.LookPath(tool); err != nil {
 				return fmt.Errorf("missing dependency: %s is not installed or in PATH", tool)
 			}
+			slog.Debug("dependency check passed", "tool", tool)
 		}
 
 		return nil
 	},
+}
+
+func init() {
+	rootCmd.PersistentFlags().BoolVarP(&debugMode, "debug", "d", false, "enable debug logging")
+}
+
+func initLogging() {
+	level := slog.LevelWarn
+	if debugMode {
+		level = slog.LevelDebug
+	}
+
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})
+	slog.SetDefault(slog.New(handler))
 }
 
 func Execute() {
