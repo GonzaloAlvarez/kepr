@@ -17,7 +17,6 @@ kepr
 
 # Go module & cache directories (safe to ignore)
 # NOTE: Do not ignore go.sum — it should be committed.
-pkg/
 vendor/
 
 # Logs

@@ -37,7 +37,7 @@ which gpg git gopass
 The init process handles GitHub authentication, GPG key generation, YubiKey provisioning, and secure cold-storage backup automatically.
 
 ```bash
-$ kepr init gonzaloalvarez/my-secrets
+$ kepr init [github_username]/kepr-secrets
 ```
 
 ### Managing Secrets
