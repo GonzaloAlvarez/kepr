@@ -1,0 +1,59 @@
+# Binaries and build output
+kepr
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go build directories
+/bin/
+/build/
+/dist/
+/cmd/*/bin/
+/cmd/*/build/
+
+# Go module & cache directories (safe to ignore)
+# NOTE: Do not ignore go.sum — it should be committed.
+pkg/
+vendor/
+
+# Logs
+*.log
+
+# OS-specific files
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# IDE / Editor settings
+# GoLand / IntelliJ
+.idea/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# vim / emacs
+*.swp
+*.swo
+*.swn
+*~
+
+# Test cache
+cover.out
+
+# Environment or config files
+.env
+.env.*
