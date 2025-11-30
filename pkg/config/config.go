@@ -84,7 +84,16 @@ func CheckDependencies() error {
 
 func SaveToken(token string) error {
 	viper.Set("github_token", token)
+	return writeConfig()
+}
 
+func SaveUserIdentity(name, email string) error {
+	viper.Set("user_name", name)
+	viper.Set("user_email", email)
+	return writeConfig()
+}
+
+func writeConfig() error {
 	dir, err := Dir()
 	if err != nil {
 		return err

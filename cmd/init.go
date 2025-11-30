@@ -38,7 +38,7 @@ var initCmd = &cobra.Command{
 
 		token := viper.GetString("github_token")
 		if token == "" {
-			slog.Debug("no token found, starting authentication")
+			slog.Debug("no token found locally, starting authentication")
 			var err error
 			token, err = github.Authenticate(githubClientID)
 			if err != nil {
@@ -49,13 +49,54 @@ var initCmd = &cobra.Command{
 				return fmt.Errorf("failed to save token: %w", err)
 			}
 
-			cout.Println("Authentication successful.")
+			cout.Successln("Authentication successful.")
 		} else {
-			slog.Debug("token found, skipping authentication")
-			cout.Println("Already authenticated.")
+			slog.Debug("token foundlocally , skipping authentication")
+			cout.Infoln("Already authenticated.")
 		}
 
-		cout.Printfln("Initializing kepr for repo: %s", repo)
+		userName := viper.GetString("user_name")
+		userEmail := viper.GetString("user_email")
+		if userName == "" || userEmail == "" {
+			slog.Debug("user identity not found locally, fetching from GitHub")
+			client := github.NewClient(token)
+
+			name, email, err := github.FetchUserIdentity(client)
+			if err != nil {
+				return fmt.Errorf("failed to fetch user identity: %w", err)
+			}
+
+			cout.Infofln("Detected identity: %s <%s>", name, email)
+
+			confirmed, err := cout.Confirm(fmt.Sprintf("Is this identity correct? [%s <%s>]", name, email))
+			if err != nil {
+				return fmt.Errorf("confirmation failed: %w", err)
+			}
+
+			if !confirmed {
+				slog.Debug("user rejected identity, requesting correction")
+				name, err = cout.Input("Correct Name:", name)
+				if err != nil {
+					return fmt.Errorf("failed to get name: %w", err)
+				}
+
+				email, err = cout.Input("Correct Email:", email)
+				if err != nil {
+					return fmt.Errorf("failed to get email: %w", err)
+				}
+			}
+
+			if err := config.SaveUserIdentity(name, email); err != nil {
+				return fmt.Errorf("failed to save user identity: %w", err)
+			}
+
+			cout.Successfln("User identity saved: %s <%s>", name, email)
+		} else {
+			cout.Successfln("Welcome back, %s!", userName)
+			slog.Debug("user identity already configured", "name", userName, "email", userEmail)
+		}
+
+		cout.Infofln("Initializing kepr for repo: %s", repo)
 		return nil
 	},
 }

@@ -37,7 +37,7 @@ var addCmd = &cobra.Command{
 			return fmt.Errorf("interactive prompt not implemented yet, please provide value argument")
 		}
 
-		cout.Printfln("Adding secret: %s", key)
+		cout.Infofln("Adding secret: %s", key)
 		_ = value
 		return nil
 	},

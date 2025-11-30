@@ -27,7 +27,7 @@ var getCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		key := args[0]
-		cout.Printfln("Getting secret: %s", key)
+		cout.Infofln("Getting secret: %s", key)
 		return nil
 	},
 }

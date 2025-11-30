@@ -23,24 +23,68 @@ import (
 	"github.com/pterm/pterm"
 )
 
-func Print(a ...interface{}) {
+func Info(a ...interface{}) {
 	slog.Debug("cout: " + fmt.Sprint(a...))
 	pterm.DefaultBasicText.Print(a...)
 }
 
-func Println(a ...interface{}) {
+func Infoln(a ...interface{}) {
 	slog.Debug("cout: " + fmt.Sprint(a...))
 	pterm.DefaultBasicText.Print(a...)
 	pterm.DefaultBasicText.Print("\n")
 }
 
-func Printf(format string, a ...interface{}) {
+func Infof(format string, a ...interface{}) {
 	slog.Debug("cout: " + fmt.Sprintf(format, a...))
 	pterm.DefaultBasicText.Printf(format, a...)
 }
 
-func Printfln(format string, a ...interface{}) {
+func Infofln(format string, a ...interface{}) {
 	slog.Debug("cout: " + fmt.Sprintf(format, a...))
 	pterm.DefaultBasicText.Printf(format, a...)
 	pterm.DefaultBasicText.Print("\n")
+}
+
+func Success(a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprint(a...))
+	pterm.FgGreen.Print(a...)
+}
+
+func Successln(a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprint(a...))
+	pterm.FgGreen.Print(a...)
+	pterm.FgGreen.Print("\n")
+}
+
+func Successf(format string, a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprintf(format, a...))
+	pterm.FgGreen.Printf(format, a...)
+}
+
+func Successfln(format string, a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprintf(format, a...))
+	pterm.FgGreen.Printf(format, a...)
+	pterm.FgGreen.Print("\n")
+}
+
+func Confirm(message string) (bool, error) {
+	slog.Debug("cout: confirm prompt", "message", message)
+	result, err := pterm.DefaultInteractiveConfirm.Show(message)
+	if err != nil {
+		slog.Error("confirm prompt failed", "error", err)
+		return false, err
+	}
+	slog.Debug("cout: confirm result", "result", result)
+	return result, nil
+}
+
+func Input(message string, defaultValue string) (string, error) {
+	slog.Debug("cout: input prompt", "message", message, "default", defaultValue)
+	result, err := pterm.DefaultInteractiveTextInput.WithDefaultValue(defaultValue).Show(message)
+	if err != nil {
+		slog.Error("input prompt failed", "error", err)
+		return "", err
+	}
+	slog.Debug("cout: input result", "result", result)
+	return result, nil
 }

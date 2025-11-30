@@ -37,8 +37,8 @@ func Authenticate(clientID string) (string, error) {
 		slog.Error("failed to request device code", "error", err)
 		return "", err
 	}
-	cout.Printfln("Please visit: %s", code.VerificationURI)
-	cout.Printfln("Enter code: %s", code.UserCode)
+	cout.Infofln("Please visit: %s", code.VerificationURI)
+	cout.Infofln("Enter code: %s", code.UserCode)
 
 	slog.Debug("waiting for user authentication")
 	accessToken, err := device.Wait(context.Background(), httpClient, "https://github.com/login/oauth/access_token", device.WaitOptions{
