@@ -106,5 +106,3 @@ func (m *MockExecutor) WasCalled(name string, args ...string) bool {
 	}
 	return false
 }
-
-

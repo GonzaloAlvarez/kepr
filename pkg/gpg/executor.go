@@ -56,5 +56,3 @@ func (e *RealExecutor) ExecuteWithStdin(stdin string, name string, args ...strin
 	err := cmd.Run()
 	return stdout.String(), stderr.String(), err
 }
-
-

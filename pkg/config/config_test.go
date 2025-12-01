@@ -90,19 +90,18 @@ func TestEnsureConfigDir_Idempotent(t *testing.T) {
 	}
 }
 
-
 func TestCheckDependencies_AllPresent(t *testing.T) {
-err := CheckDependencies()
-if err != nil {
-t.Logf("CheckDependencies() returned error (may be expected if dependencies not installed): %v", err)
-}
+	err := CheckDependencies()
+	if err != nil {
+		t.Logf("CheckDependencies() returned error (may be expected if dependencies not installed): %v", err)
+	}
 }
 
 func TestViperReset_IsolatesTests(t *testing.T) {
 	viper.Set("test_key", "test_value")
-	
+
 	viper.Reset()
-	
+
 	value := viper.GetString("test_key")
 	if value != "" {
 		t.Errorf("expected empty string after reset, got %q", value)

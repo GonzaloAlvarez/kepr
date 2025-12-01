@@ -32,4 +32,3 @@ func (c *RealConsole) Input(message string, defaultValue string) (string, error)
 }
 
 var DefaultConsole Console = &RealConsole{}
-
