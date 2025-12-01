@@ -17,6 +17,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package gpg
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -174,5 +176,93 @@ func TestGenerateAgentConf_DifferentPaths(t *testing.T) {
 				t.Errorf("expected conf to contain %q, got:\n%s", expected, conf)
 			}
 		})
+	}
+}
+
+func TestWriteConfigs(t *testing.T) {
+	tempDir := t.TempDir()
+
+	gpg := &GPG{
+		HomeDir:         tempDir,
+		ConfigPath:      filepath.Join(tempDir, "gpg.conf"),
+		AgentConfigPath: filepath.Join(tempDir, "gpg-agent.conf"),
+		PinentryPath:    "/usr/bin/pinentry-test",
+	}
+
+	err := gpg.writeConfigs()
+	if err != nil {
+		t.Fatalf("writeConfigs() failed: %v", err)
+	}
+
+	gpgConfData, err := os.ReadFile(gpg.ConfigPath)
+	if err != nil {
+		t.Fatalf("failed to read gpg.conf: %v", err)
+	}
+
+	gpgConf := string(gpgConfData)
+	if !strings.Contains(gpgConf, "use-agent") {
+		t.Error("gpg.conf missing 'use-agent'")
+	}
+	if !strings.Contains(gpgConf, "keyid-format 0xlong") {
+		t.Error("gpg.conf missing 'keyid-format 0xlong'")
+	}
+
+	agentConfData, err := os.ReadFile(gpg.AgentConfigPath)
+	if err != nil {
+		t.Fatalf("failed to read gpg-agent.conf: %v", err)
+	}
+
+	agentConf := string(agentConfData)
+	if !strings.Contains(agentConf, "pinentry-program /usr/bin/pinentry-test") {
+		t.Error("gpg-agent.conf missing correct pinentry-program")
+	}
+}
+
+func TestWriteConfigs_FilePermissions(t *testing.T) {
+	tempDir := t.TempDir()
+
+	gpg := &GPG{
+		HomeDir:         tempDir,
+		ConfigPath:      filepath.Join(tempDir, "gpg.conf"),
+		AgentConfigPath: filepath.Join(tempDir, "gpg-agent.conf"),
+		PinentryPath:    "/usr/bin/pinentry",
+	}
+
+	err := gpg.writeConfigs()
+	if err != nil {
+		t.Fatalf("writeConfigs() failed: %v", err)
+	}
+
+	gpgConfInfo, err := os.Stat(gpg.ConfigPath)
+	if err != nil {
+		t.Fatalf("failed to stat gpg.conf: %v", err)
+	}
+
+	expectedMode := os.FileMode(0600)
+	if gpgConfInfo.Mode().Perm() != expectedMode {
+		t.Errorf("gpg.conf permissions: expected %o, got %o", expectedMode, gpgConfInfo.Mode().Perm())
+	}
+
+	agentConfInfo, err := os.Stat(gpg.AgentConfigPath)
+	if err != nil {
+		t.Fatalf("failed to stat gpg-agent.conf: %v", err)
+	}
+
+	if agentConfInfo.Mode().Perm() != expectedMode {
+		t.Errorf("gpg-agent.conf permissions: expected %o, got %o", expectedMode, agentConfInfo.Mode().Perm())
+	}
+}
+
+func TestWriteConfigs_InvalidPath(t *testing.T) {
+	gpg := &GPG{
+		HomeDir:         "/nonexistent/path/that/does/not/exist",
+		ConfigPath:      "/nonexistent/path/that/does/not/exist/gpg.conf",
+		AgentConfigPath: "/nonexistent/path/that/does/not/exist/gpg-agent.conf",
+		PinentryPath:    "/usr/bin/pinentry",
+	}
+
+	err := gpg.writeConfigs()
+	if err == nil {
+		t.Fatal("expected writeConfigs() to fail with invalid path, got nil")
 	}
 }
