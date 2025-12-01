@@ -17,6 +17,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package gpg
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -265,4 +266,321 @@ func TestWriteConfigs_InvalidPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected writeConfigs() to fail with invalid path, got nil")
 	}
+}
+
+func TestGenerateKeys_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+		"fpr:::::::::ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234:\n", "", nil)
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--pinentry-mode", "loopback", "--passphrase", "", "--quick-add-key", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234", "cv25519", "encr", "0"}, "", "", nil)
+
+	gpg := &GPG{
+		BinaryPath:   "/usr/bin/gpg",
+		HomeDir:      tempDir,
+		PinentryPath: "/usr/bin/pinentry",
+		executor:     mockExec,
+	}
+
+	fingerprint, err := gpg.GenerateKeys("Test User", "test@example.com")
+	if err != nil {
+		t.Fatalf("GenerateKeys() failed: %v", err)
+	}
+
+	expected := "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234"
+	if fingerprint != expected {
+		t.Errorf("expected fingerprint %q, got %q", expected, fingerprint)
+	}
+
+	if len(mockExec.Calls) != 3 {
+		t.Errorf("expected 3 calls, got %d", len(mockExec.Calls))
+	}
+
+	if !mockExec.WasCalled("/usr/bin/gpg", "--batch", "--gen-key") {
+		t.Error("expected gen-key command to be called")
+	}
+
+	if !mockExec.WasCalled("/usr/bin/gpg", "--list-keys", "--with-colons") {
+		t.Error("expected list-keys command to be called")
+	}
+}
+
+func TestGenerateKeys_MasterKeyFails(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"},
+		"", "gpg: error generating key", fmt.Errorf("exit status 2"))
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+	}
+
+	_, err := gpg.GenerateKeys("Test User", "test@example.com")
+	if err == nil {
+		t.Fatal("expected GenerateKeys() to fail, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "failed to generate master key") {
+		t.Errorf("expected error to mention master key generation, got: %v", err)
+	}
+}
+
+func TestGenerateKeys_SubkeyFails(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+		"fpr:::::::::TESTFINGERPRINT123456789012345678:\n", "", nil)
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--pinentry-mode", "loopback", "--passphrase", "", "--quick-add-key", "TESTFINGERPRINT123456789012345678", "cv25519", "encr", "0"},
+		"", "gpg: error adding subkey", fmt.Errorf("exit status 2"))
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+	}
+
+	_, err := gpg.GenerateKeys("Test User", "test@example.com")
+	if err == nil {
+		t.Fatal("expected GenerateKeys() to fail on subkey, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "failed to generate encryption subkey") {
+		t.Errorf("expected error to mention subkey generation, got: %v", err)
+	}
+}
+
+func TestGetFingerprint_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+		"fpr:::::::::FINGERPRINT1234567890ABCDEF1234567890:\n", "", nil)
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+	}
+
+	fingerprint, err := gpg.getFingerprint()
+	if err != nil {
+		t.Fatalf("getFingerprint() failed: %v", err)
+	}
+
+	expected := "FINGERPRINT1234567890ABCDEF1234567890"
+	if fingerprint != expected {
+		t.Errorf("expected fingerprint %q, got %q", expected, fingerprint)
+	}
+}
+
+func TestGetFingerprint_ListKeysFails(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+		"", "gpg: no keys found", fmt.Errorf("exit status 2"))
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+	}
+
+	_, err := gpg.getFingerprint()
+	if err == nil {
+		t.Fatal("expected getFingerprint() to fail, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "failed to list keys") {
+		t.Errorf("expected error to mention list keys, got: %v", err)
+	}
+}
+
+func TestGetFingerprint_NoFingerprintInOutput(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+		"pub:u:255:22:1234567890ABCDEF:2025-12-01:::", "", nil)
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+	}
+
+	_, err := gpg.getFingerprint()
+	if err == nil {
+		t.Fatal("expected getFingerprint() to fail when no fpr line, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "fingerprint not found") {
+		t.Errorf("expected error to mention fingerprint not found, got: %v", err)
+	}
+}
+
+func TestProcessMasterKey_ExportFails(t *testing.T) {
+tempDir := t.TempDir()
+
+mockExec := NewMockExecutor()
+mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export-secret-key", "TESTFINGERPRINT"},
+"", "gpg: key not found", fmt.Errorf("exit status 2"))
+
+gpg := &GPG{
+BinaryPath: "/usr/bin/gpg",
+HomeDir:    tempDir,
+executor:   mockExec,
+}
+
+err := gpg.ProcessMasterKey("TESTFINGERPRINT")
+if err == nil {
+t.Fatal("expected ProcessMasterKey() to fail on export, got nil")
+}
+
+if !strings.Contains(err.Error(), "failed to export secret key") {
+t.Errorf("expected error to mention export failure, got: %v", err)
+}
+}
+
+func TestProcessMasterKey_EmptySecretKey(t *testing.T) {
+tempDir := t.TempDir()
+
+mockExec := NewMockExecutor()
+mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export-secret-key", "TESTFINGERPRINT"},
+"", "", nil)
+
+gpg := &GPG{
+BinaryPath: "/usr/bin/gpg",
+HomeDir:    tempDir,
+executor:   mockExec,
+}
+
+err := gpg.ProcessMasterKey("TESTFINGERPRINT")
+if err == nil {
+t.Fatal("expected ProcessMasterKey() to fail with empty key, got nil")
+}
+
+if !strings.Contains(err.Error(), "exported secret key is empty") {
+t.Errorf("expected error to mention empty secret key, got: %v", err)
+}
+}
+
+func TestGenerateKeys_FingerprintRetrievalFails(t *testing.T) {
+tempDir := t.TempDir()
+
+mockExec := NewMockExecutor()
+mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
+mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+"", "gpg: no keys", fmt.Errorf("exit status 2"))
+
+gpg := &GPG{
+BinaryPath: "/usr/bin/gpg",
+HomeDir:    tempDir,
+executor:   mockExec,
+}
+
+_, err := gpg.GenerateKeys("Test User", "test@example.com")
+if err == nil {
+t.Fatal("expected GenerateKeys() to fail on fingerprint retrieval, got nil")
+}
+
+if !strings.Contains(err.Error(), "failed to list keys") {
+t.Errorf("expected error to mention list keys failure, got: %v", err)
+}
+}
+
+func TestGenerateKeys_WithSpecialCharactersInName(t *testing.T) {
+tempDir := t.TempDir()
+
+mockExec := NewMockExecutor()
+mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
+mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+"fpr:::::::::SPECIALCHARSFINGERPRINT12345678901234:\n", "", nil)
+mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--pinentry-mode", "loopback", "--passphrase", "", "--quick-add-key", "SPECIALCHARSFINGERPRINT12345678901234", "cv25519", "encr", "0"}, "", "", nil)
+
+gpg := &GPG{
+BinaryPath: "/usr/bin/gpg",
+HomeDir:    tempDir,
+executor:   mockExec,
+}
+
+fingerprint, err := gpg.GenerateKeys("Test User (Comment) <tag>", "test+tag@example.com")
+if err != nil {
+t.Fatalf("GenerateKeys() with special characters failed: %v", err)
+}
+
+expected := "SPECIALCHARSFINGERPRINT12345678901234"
+if fingerprint != expected {
+t.Errorf("expected fingerprint %q, got %q", expected, fingerprint)
+}
+
+if len(mockExec.Calls) != 3 {
+t.Errorf("expected 3 calls, got %d", len(mockExec.Calls))
+}
+
+firstCall := mockExec.Calls[0]
+if !strings.Contains(firstCall.Stdin, "Test User (Comment) <tag>") {
+t.Error("expected name with special characters in key template")
+}
+if !strings.Contains(firstCall.Stdin, "test+tag@example.com") {
+t.Error("expected email with + character in key template")
+}
+}
+
+func TestMockExecutor_UnexpectedCommand(t *testing.T) {
+mockExec := NewMockExecutor()
+
+_, _, err := mockExec.Execute("/usr/bin/gpg", "--unexpected", "--command")
+if err == nil {
+t.Fatal("expected mock executor to fail on unexpected command, got nil")
+}
+
+if !strings.Contains(err.Error(), "mock: unexpected command") {
+t.Errorf("expected error to mention unexpected command, got: %v", err)
+}
+}
+
+func TestMockExecutor_WasCalled(t *testing.T) {
+mockExec := NewMockExecutor()
+mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys"}, "output", "", nil)
+
+mockExec.Execute("/usr/bin/gpg", "--list-keys")
+
+if !mockExec.WasCalled("/usr/bin/gpg", "--list-keys") {
+t.Error("expected WasCalled to return true for executed command")
+}
+
+if mockExec.WasCalled("/usr/bin/gpg", "--other-command") {
+t.Error("expected WasCalled to return false for non-executed command")
+}
+}
+
+func TestMockExecutor_MultipleCallsSameCommand(t *testing.T) {
+mockExec := NewMockExecutor()
+mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys"}, "output1", "", nil)
+
+mockExec.Execute("/usr/bin/gpg", "--list-keys")
+mockExec.Execute("/usr/bin/gpg", "--list-keys")
+
+if len(mockExec.Calls) != 2 {
+t.Errorf("expected 2 calls recorded, got %d", len(mockExec.Calls))
+}
+}
+
+func TestRealExecutor_SetsGNUPGHOME(t *testing.T) {
+tempDir := t.TempDir()
+
+executor := &RealExecutor{HomeDir: tempDir}
+
+_, _, err := executor.Execute("printenv", "GNUPGHOME")
+if err != nil {
+t.Fatalf("Execute() failed: %v", err)
+}
 }

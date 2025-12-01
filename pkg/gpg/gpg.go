@@ -17,7 +17,6 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package gpg
 
 import (
-	"bytes"
 	"fmt"
 	"log/slog"
 	"os"
@@ -34,6 +33,7 @@ type GPG struct {
 	HomeDir         string
 	AgentConfigPath string
 	ConfigPath      string
+	executor        CommandExecutor
 }
 
 func findPinentry() (string, error) {
@@ -74,6 +74,39 @@ func New(configBaseDir string) (*GPG, error) {
 		HomeDir:         homeDir,
 		AgentConfigPath: filepath.Join(homeDir, "gpg-agent.conf"),
 		ConfigPath:      filepath.Join(homeDir, "gpg.conf"),
+		executor:        &RealExecutor{HomeDir: homeDir},
+	}
+
+	if err := gpg.writeConfigs(); err != nil {
+		return nil, err
+	}
+
+	return gpg, nil
+}
+
+func NewWithExecutor(configBaseDir string, executor CommandExecutor) (*GPG, error) {
+	gpgBinary, err := exec.LookPath("gpg")
+	if err != nil {
+		return nil, fmt.Errorf("gpg binary not found: %w", err)
+	}
+
+	pinentryBinary, err := findPinentry()
+	if err != nil {
+		return nil, err
+	}
+
+	homeDir := filepath.Join(configBaseDir, "gpg")
+	if err := os.MkdirAll(homeDir, 0700); err != nil {
+		return nil, fmt.Errorf("failed to create gpg home directory: %w", err)
+	}
+
+	gpg := &GPG{
+		BinaryPath:      gpgBinary,
+		PinentryPath:    pinentryBinary,
+		HomeDir:         homeDir,
+		AgentConfigPath: filepath.Join(homeDir, "gpg-agent.conf"),
+		ConfigPath:      filepath.Join(homeDir, "gpg.conf"),
+		executor:        executor,
 	}
 
 	if err := gpg.writeConfigs(); err != nil {
@@ -133,15 +166,9 @@ Expire-Date: 0
 %%commit
 `, name, email)
 
-	cmd := exec.Command(g.BinaryPath, "--batch", "--gen-key")
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir))
-	cmd.Stdin = strings.NewReader(keyTemplate)
-
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("failed to generate master key: %w, stderr: %s", err, stderr.String())
+	_, stderr, err := g.executor.ExecuteWithStdin(keyTemplate, g.BinaryPath, "--batch", "--gen-key")
+	if err != nil {
+		return "", fmt.Errorf("failed to generate master key: %w, stderr: %s", err, stderr)
 	}
 
 	slog.Debug("master key generated, retrieving fingerprint")
@@ -153,13 +180,9 @@ Expire-Date: 0
 
 	slog.Debug("adding encryption subkey", "fingerprint", fingerprint)
 
-	cmd = exec.Command(g.BinaryPath, "--batch", "--pinentry-mode", "loopback", "--passphrase", "", "--quick-add-key", fingerprint, "cv25519", "encr", "0")
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir))
-	stderr.Reset()
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("failed to generate encryption subkey: %w, stderr: %s", err, stderr.String())
+	_, stderr, err = g.executor.Execute(g.BinaryPath, "--batch", "--pinentry-mode", "loopback", "--passphrase", "", "--quick-add-key", fingerprint, "cv25519", "encr", "0")
+	if err != nil {
+		return "", fmt.Errorf("failed to generate encryption subkey: %w, stderr: %s", err, stderr)
 	}
 
 	slog.Debug("encryption subkey generated")
@@ -167,17 +190,12 @@ Expire-Date: 0
 }
 
 func (g *GPG) getFingerprint() (string, error) {
-	cmd := exec.Command(g.BinaryPath, "--list-keys", "--with-colons")
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir))
-
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-
-	if err := cmd.Run(); err != nil {
+	stdout, _, err := g.executor.Execute(g.BinaryPath, "--list-keys", "--with-colons")
+	if err != nil {
 		return "", fmt.Errorf("failed to list keys: %w", err)
 	}
 
-	return parseFingerprintFromGPGOutput(stdout.String())
+	return parseFingerprintFromGPGOutput(stdout)
 }
 
 func parseFingerprintFromGPGOutput(output string) (string, error) {
@@ -198,18 +216,12 @@ func parseFingerprintFromGPGOutput(output string) (string, error) {
 func (g *GPG) ProcessMasterKey(fingerprint string) error {
 	slog.Debug("exporting master key for backup", "fingerprint", fingerprint)
 
-	cmd := exec.Command(g.BinaryPath, "--armor", "--export-secret-key", fingerprint)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir))
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to export secret key: %w, stderr: %s", err, stderr.String())
+	stdout, stderr, err := g.executor.Execute(g.BinaryPath, "--armor", "--export-secret-key", fingerprint)
+	if err != nil {
+		return fmt.Errorf("failed to export secret key: %w, stderr: %s", err, stderr)
 	}
 
-	secretKey := stdout.String()
+	secretKey := stdout
 	if secretKey == "" {
 		return fmt.Errorf("exported secret key is empty")
 	}
@@ -231,13 +243,9 @@ func (g *GPG) ProcessMasterKey(fingerprint string) error {
 
 	slog.Debug("user confirmed backup, deleting master key from keyring")
 
-	cmd = exec.Command(g.BinaryPath, "--batch", "--yes", "--delete-secret-keys", fingerprint)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir))
-	stderr.Reset()
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to delete secret keys: %w, stderr: %s", err, stderr.String())
+	_, stderr, err = g.executor.Execute(g.BinaryPath, "--batch", "--yes", "--delete-secret-keys", fingerprint)
+	if err != nil {
+		return fmt.Errorf("failed to delete secret keys: %w, stderr: %s", err, stderr)
 	}
 
 	slog.Debug("master key deleted from local keyring")
