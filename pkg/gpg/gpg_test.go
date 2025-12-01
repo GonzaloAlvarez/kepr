@@ -1,0 +1,178 @@
+/*
+Copyright © 2025 Gonzalo Alvarez
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+package gpg
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestParseFingerprintFromGPGOutput_Success(t *testing.T) {
+	output := `tru::1:1733100896:0:3:1:5
+pub:-:255:22:4B4040BF3305A8FF:1733100896:::-:::escaESCA:::::::23::0:
+fpr:::::::::4AE0C21F0B01B9EC08E48D3C4B4040BF3305A8FF:
+uid:-::::1733100896::C8F9E7F8D8A9E8F8D8A9E8F8::Test User <test@example.com>::::::::::0:
+sub:-:255:18:A399C16AA20E1EC7:1733100896::::::e:::::::23::0:
+fpr:::::::::9E8F9E8F9E8F9E8FA399C16AA20E1EC7:`
+
+	fingerprint, err := parseFingerprintFromGPGOutput(output)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	expected := "4AE0C21F0B01B9EC08E48D3C4B4040BF3305A8FF"
+	if fingerprint != expected {
+		t.Errorf("expected fingerprint %q, got %q", expected, fingerprint)
+	}
+}
+
+func TestParseFingerprintFromGPGOutput_MultipleKeys(t *testing.T) {
+	output := `pub:-:255:22:AAAAAAAAAAAAAAAA:1733100896:::-:::escaESCA:::::::23::0:
+fpr:::::::::AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:
+uid:-::::1733100896::C8F9E7F8D8A9E8F8D8A9E8F8::First Key <first@example.com>::::::::::0:
+pub:-:255:22:BBBBBBBBBBBBBBBB:1733100897:::-:::escaESCA:::::::23::0:
+fpr:::::::::BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:
+uid:-::::1733100897::C8F9E7F8D8A9E8F8D8A9E8F8::Second Key <second@example.com>::::::::::0:`
+
+	fingerprint, err := parseFingerprintFromGPGOutput(output)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	expected := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	if fingerprint != expected {
+		t.Errorf("expected first fingerprint %q, got %q", expected, fingerprint)
+	}
+}
+
+func TestParseFingerprintFromGPGOutput_NoFingerprint(t *testing.T) {
+	output := `pub:-:255:22:4B4040BF3305A8FF:1733100896:::-:::escaESCA:::::::23::0:
+uid:-::::1733100896::C8F9E7F8D8A9E8F8D8A9E8F8::Test User <test@example.com>::::::::::0:`
+
+	_, err := parseFingerprintFromGPGOutput(output)
+	if err == nil {
+		t.Fatal("expected error for missing fingerprint, got nil")
+	}
+
+	expectedError := "fingerprint not found in gpg output"
+	if err.Error() != expectedError {
+		t.Errorf("expected error %q, got %q", expectedError, err.Error())
+	}
+}
+
+func TestParseFingerprintFromGPGOutput_EmptyOutput(t *testing.T) {
+	output := ""
+
+	_, err := parseFingerprintFromGPGOutput(output)
+	if err == nil {
+		t.Fatal("expected error for empty output, got nil")
+	}
+}
+
+func TestParseFingerprintFromGPGOutput_MalformedFprLine(t *testing.T) {
+	output := `pub:-:255:22:4B4040BF3305A8FF:1733100896:::-:::escaESCA:::::::23::0:
+fpr:too:few:fields
+uid:-::::1733100896::C8F9E7F8D8A9E8F8D8A9E8F8::Test User <test@example.com>::::::::::0:`
+
+	_, err := parseFingerprintFromGPGOutput(output)
+	if err == nil {
+		t.Fatal("expected error for malformed fpr line, got nil")
+	}
+}
+
+func TestParseFingerprintFromGPGOutput_WithWhitespace(t *testing.T) {
+	output := `
+	
+pub:-:255:22:4B4040BF3305A8FF:1733100896:::-:::escaESCA:::::::23::0:
+fpr:::::::::4AE0C21F0B01B9EC08E48D3C4B4040BF3305A8FF:
+
+uid:-::::1733100896::C8F9E7F8D8A9E8F8D8A9E8F8::Test User <test@example.com>::::::::::0:
+	`
+
+	fingerprint, err := parseFingerprintFromGPGOutput(output)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	expected := "4AE0C21F0B01B9EC08E48D3C4B4040BF3305A8FF"
+	if fingerprint != expected {
+		t.Errorf("expected fingerprint %q, got %q", expected, fingerprint)
+	}
+}
+
+func TestGenerateGPGConf(t *testing.T) {
+	conf := generateGPGConf()
+
+	requiredSettings := []string{
+		"use-agent",
+		"no-emit-version",
+		"no-comments",
+		"keyid-format 0xlong",
+		"with-fingerprint",
+		"list-options show-uid-validity",
+		"verify-options show-uid-validity",
+	}
+
+	for _, setting := range requiredSettings {
+		if !strings.Contains(conf, setting) {
+			t.Errorf("expected gpg.conf to contain %q", setting)
+		}
+	}
+}
+
+func TestGenerateAgentConf(t *testing.T) {
+	pinentryPath := "/usr/bin/pinentry-mac"
+	conf := generateAgentConf(pinentryPath)
+
+	if !strings.Contains(conf, "pinentry-program /usr/bin/pinentry-mac") {
+		t.Errorf("expected agent conf to contain pinentry path")
+	}
+
+	if !strings.Contains(conf, "default-cache-ttl 600") {
+		t.Errorf("expected agent conf to contain default-cache-ttl")
+	}
+
+	if !strings.Contains(conf, "max-cache-ttl 7200") {
+		t.Errorf("expected agent conf to contain max-cache-ttl")
+	}
+
+	if !strings.Contains(conf, "# GPG Agent Config generated by kepr") {
+		t.Errorf("expected agent conf to contain header comment")
+	}
+}
+
+func TestGenerateAgentConf_DifferentPaths(t *testing.T) {
+	tests := []struct {
+		name         string
+		pinentryPath string
+	}{
+		{"mac", "/opt/homebrew/bin/pinentry-mac"},
+		{"gnome", "/usr/bin/pinentry-gnome3"},
+		{"curses", "/usr/bin/pinentry-curses"},
+		{"default", "/usr/bin/pinentry"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conf := generateAgentConf(tt.pinentryPath)
+			expected := "pinentry-program " + tt.pinentryPath
+			if !strings.Contains(conf, expected) {
+				t.Errorf("expected conf to contain %q, got:\n%s", expected, conf)
+			}
+		})
+	}
+}
