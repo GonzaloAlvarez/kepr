@@ -54,11 +54,15 @@ func SetupGPG() error {
 			return fmt.Errorf("failed to generate keys: %w", err)
 		}
 
+		cout.Successfln("Generated Identity: %s", fingerprint)
+
+		if err := g.ProcessMasterKey(fingerprint); err != nil {
+			return fmt.Errorf("failed to process master key: %w", err)
+		}
+
 		if err := config.SaveFingerprint(fingerprint); err != nil {
 			return fmt.Errorf("failed to save fingerprint: %w", err)
 		}
-
-		cout.Successfln("Generated Identity: %s", fingerprint)
 	} else {
 		slog.Debug("fingerprint already exists", "fingerprint", fingerprint)
 	}

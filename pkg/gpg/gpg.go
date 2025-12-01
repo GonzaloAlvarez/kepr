@@ -24,6 +24,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/gonzaloalvarez/kepr/pkg/cout"
 )
 
 type GPG struct {
@@ -180,4 +182,55 @@ func (g *GPG) getFingerprint() (string, error) {
 	}
 
 	return "", fmt.Errorf("fingerprint not found in gpg output")
+}
+
+func (g *GPG) ProcessMasterKey(fingerprint string) error {
+	slog.Debug("exporting master key for backup", "fingerprint", fingerprint)
+
+	cmd := exec.Command(g.BinaryPath, "--armor", "--export-secret-key", fingerprint)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir))
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to export secret key: %w, stderr: %s", err, stderr.String())
+	}
+
+	secretKey := stdout.String()
+	if secretKey == "" {
+		return fmt.Errorf("exported secret key is empty")
+	}
+
+	cout.WarningMessage("WARNING: The Master Key below will be DELETED from this machine immediately after this step.")
+	cout.Infoln("")
+	cout.Info(secretKey)
+	cout.Infoln("")
+	cout.Infoln("Copy the key block above and save it to a secure location (e.g., Bitwarden, 1Password, or a Gmail Draft).")
+
+	confirmed, err := cout.Confirm("Have you saved the Private Key safely? This action cannot be undone.")
+	if err != nil {
+		return fmt.Errorf("confirmation failed: %w", err)
+	}
+
+	if !confirmed {
+		return fmt.Errorf("master key backup cancelled by user")
+	}
+
+	slog.Debug("user confirmed backup, deleting master key from keyring")
+
+	cmd = exec.Command(g.BinaryPath, "--batch", "--yes", "--delete-secret-keys", fingerprint)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir))
+	stderr.Reset()
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to delete secret keys: %w, stderr: %s", err, stderr.String())
+	}
+
+	slog.Debug("master key deleted from local keyring")
+	cout.Successln("Master key has been removed from this machine.")
+
+	return nil
 }

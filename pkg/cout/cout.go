@@ -88,3 +88,8 @@ func Input(message string, defaultValue string) (string, error) {
 	slog.Debug("cout: input result", "result", result)
 	return result, nil
 }
+
+func WarningMessage(message string) {
+	slog.Debug("cout: warning - " + message)
+	pterm.FgRed.Println(message)
+}
