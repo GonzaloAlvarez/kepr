@@ -14,39 +14,25 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
-package cmd
+package initialize
 
 import (
-	initialize "github.com/gonzaloalvarez/kepr/internal/init"
+	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
-	"github.com/spf13/cobra"
+	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 )
 
-var initCmd = &cobra.Command{
-	Use:   "init [username/repo]",
-	Short: "Initialize a new kepr repository",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		repo := args[0]
+func SetupGPG() error {
+	configDir, err := config.Dir()
+	if err != nil {
+		return err
+	}
 
-		token, err := initialize.AuthGithub()
-		if err != nil {
-			return err
-		}
+	g, err := gpg.New(configDir)
+	if err != nil {
+		return err
+	}
 
-		if err := initialize.UserInfo(token); err != nil {
-			return err
-		}
-
-		if err := initialize.SetupGPG(); err != nil {
-			return err
-		}
-
-		cout.Infofln("Initializing kepr for repo: %s", repo)
-		return nil
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(initCmd)
+	cout.Successfln("GPG environment initialized at %s", g.HomeDir)
+	return nil
 }

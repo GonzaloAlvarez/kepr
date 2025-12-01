@@ -79,6 +79,20 @@ func CheckDependencies() error {
 		}
 		slog.Debug("dependency check passed", "tool", tool)
 	}
+
+	pinentryVariants := []string{"pinentry-mac", "pinentry-gnome3", "pinentry", "pinentry-curses"}
+	found := false
+	for _, variant := range pinentryVariants {
+		if _, err := exec.LookPath(variant); err == nil {
+			slog.Debug("dependency check passed", "tool", variant)
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("missing dependency: no pinentry program found (tried: %v)", pinentryVariants)
+	}
+
 	return nil
 }
 
