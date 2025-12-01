@@ -17,9 +17,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package initialize
 
 import (
+	"fmt"
+	"log/slog"
+
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/gpg"
+	"github.com/spf13/viper"
 )
 
 func SetupGPG() error {
@@ -34,5 +38,30 @@ func SetupGPG() error {
 	}
 
 	cout.Successfln("GPG environment initialized at %s", g.HomeDir)
+
+	fingerprint := viper.GetString("user_fingerprint")
+	if fingerprint == "" {
+		slog.Debug("no fingerprint found, generating keys")
+		userName := viper.GetString("user_name")
+		userEmail := viper.GetString("user_email")
+
+		if userName == "" || userEmail == "" {
+			return fmt.Errorf("user identity not configured")
+		}
+
+		fingerprint, err = g.GenerateKeys(userName, userEmail)
+		if err != nil {
+			return fmt.Errorf("failed to generate keys: %w", err)
+		}
+
+		if err := config.SaveFingerprint(fingerprint); err != nil {
+			return fmt.Errorf("failed to save fingerprint: %w", err)
+		}
+
+		cout.Successfln("Generated Identity: %s", fingerprint)
+	} else {
+		slog.Debug("fingerprint already exists", "fingerprint", fingerprint)
+	}
+
 	return nil
 }

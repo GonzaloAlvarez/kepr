@@ -107,6 +107,11 @@ func SaveUserIdentity(name, email string) error {
 	return writeConfig()
 }
 
+func SaveFingerprint(fingerprint string) error {
+	viper.Set("user_fingerprint", fingerprint)
+	return writeConfig()
+}
+
 func writeConfig() error {
 	dir, err := Dir()
 	if err != nil {

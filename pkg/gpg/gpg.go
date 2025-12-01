@@ -17,11 +17,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package gpg
 
 import (
+	"bytes"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 type GPG struct {
@@ -106,4 +108,76 @@ max-cache-ttl 7200
 	}
 
 	return nil
+}
+
+func (g *GPG) GenerateKeys(name, email string) (string, error) {
+	slog.Debug("generating master key", "name", name, "email", email)
+
+	keyTemplate := fmt.Sprintf(`Key-Type: EDDSA
+Key-Curve: ed25519
+Key-Usage: cert
+Name-Real: %s
+Name-Email: %s
+Expire-Date: 0
+%%no-protection
+%%commit
+`, name, email)
+
+	cmd := exec.Command(g.BinaryPath, "--batch", "--gen-key")
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir))
+	cmd.Stdin = strings.NewReader(keyTemplate)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to generate master key: %w, stderr: %s", err, stderr.String())
+	}
+
+	slog.Debug("master key generated, retrieving fingerprint")
+
+	fingerprint, err := g.getFingerprint()
+	if err != nil {
+		return "", err
+	}
+
+	slog.Debug("adding encryption subkey", "fingerprint", fingerprint)
+
+	cmd = exec.Command(g.BinaryPath, "--batch", "--pinentry-mode", "loopback", "--passphrase", "", "--quick-add-key", fingerprint, "cv25519", "encr", "0")
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir))
+	stderr.Reset()
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to generate encryption subkey: %w, stderr: %s", err, stderr.String())
+	}
+
+	slog.Debug("encryption subkey generated")
+	return fingerprint, nil
+}
+
+func (g *GPG) getFingerprint() (string, error) {
+	cmd := exec.Command(g.BinaryPath, "--list-keys", "--with-colons")
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir))
+
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to list keys: %w", err)
+	}
+
+	lines := strings.Split(stdout.String(), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "fpr:") {
+			fields := strings.Split(line, ":")
+			if len(fields) >= 10 {
+				fingerprint := fields[9]
+				slog.Debug("found fingerprint", "fingerprint", fingerprint)
+				return fingerprint, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("fingerprint not found in gpg output")
 }
