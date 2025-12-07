@@ -17,8 +17,12 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package gpg
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"strings"
+
+	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
 type MockExecutor struct {
@@ -45,35 +49,39 @@ func NewMockExecutor() *MockExecutor {
 	}
 }
 
-func (m *MockExecutor) Execute(name string, args ...string) (string, string, error) {
-	m.Calls = append(m.Calls, MockCall{
-		Name: name,
-		Args: args,
-	})
-
-	key := m.makeKey(name, args)
-	resp, ok := m.Responses[key]
-	if !ok {
-		return "", "", fmt.Errorf("mock: unexpected command: %s %v", name, args)
-	}
-
-	return resp.Stdout, resp.Stderr, resp.Err
+func (m *MockExecutor) LookPath(file string) (string, error) {
+	return file, nil
 }
 
-func (m *MockExecutor) ExecuteWithStdin(stdin string, name string, args ...string) (string, string, error) {
+func (m *MockExecutor) Command(name string, args ...string) shell.Cmd {
+	return &MockCmd{
+		executor: m,
+		name:     name,
+		args:     args,
+	}
+}
+
+func (m *MockExecutor) executeMock(c *MockCmd) error {
 	m.Calls = append(m.Calls, MockCall{
-		Name:  name,
-		Args:  args,
-		Stdin: stdin,
+		Name:  c.name,
+		Args:  c.args,
+		Stdin: c.stdinContent,
 	})
 
-	key := m.makeKey(name, args)
+	key := m.makeKey(c.name, c.args)
 	resp, ok := m.Responses[key]
 	if !ok {
-		return "", "", fmt.Errorf("mock: unexpected command: %s %v", name, args)
+		return fmt.Errorf("mock: unexpected command: %s %v", c.name, c.args)
 	}
 
-	return resp.Stdout, resp.Stderr, resp.Err
+	if c.stdout != nil {
+		c.stdout.Write([]byte(resp.Stdout))
+	}
+	if c.stderr != nil {
+		c.stderr.Write([]byte(resp.Stderr))
+	}
+
+	return resp.Err
 }
 
 func (m *MockExecutor) makeKey(name string, args []string) string {
@@ -105,4 +113,45 @@ func (m *MockExecutor) WasCalled(name string, args ...string) bool {
 		}
 	}
 	return false
+}
+
+type MockCmd struct {
+	executor     *MockExecutor
+	name         string
+	args         []string
+	stdinContent string
+	stdout       io.Writer
+	stderr       io.Writer
+}
+
+func (c *MockCmd) SetDir(dir string)   {}
+func (c *MockCmd) SetEnv(env []string) {}
+func (c *MockCmd) SetStdin(r io.Reader) {
+	if r != nil {
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(r)
+		c.stdinContent = buf.String()
+	}
+}
+func (c *MockCmd) SetStdout(w io.Writer) {
+	c.stdout = w
+}
+func (c *MockCmd) SetStderr(w io.Writer) {
+	c.stderr = w
+}
+func (c *MockCmd) Run() error {
+	return c.executor.executeMock(c)
+}
+func (c *MockCmd) Output() ([]byte, error) {
+	var out bytes.Buffer
+	c.SetStdout(&out)
+	err := c.Run()
+	return out.Bytes(), err
+}
+func (c *MockCmd) CombinedOutput() ([]byte, error) {
+	var out bytes.Buffer
+	c.SetStdout(&out)
+	c.SetStderr(&out)
+	err := c.Run()
+	return out.Bytes(), err
 }

@@ -19,6 +19,7 @@ package cmd
 import (
 	initialize "github.com/gonzaloalvarez/kepr/internal/init"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
+	"github.com/gonzaloalvarez/kepr/pkg/shell"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +39,7 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
-		if err := initialize.SetupGPG(); err != nil {
+		if err := initialize.SetupGPG(&shell.SystemExecutor{}); err != nil {
 			return err
 		}
 

@@ -537,7 +537,7 @@ func TestGenerateKeys_WithSpecialCharactersInName(t *testing.T) {
 func TestMockExecutor_UnexpectedCommand(t *testing.T) {
 	mockExec := NewMockExecutor()
 
-	_, _, err := mockExec.Execute("/usr/bin/gpg", "--unexpected", "--command")
+	err := mockExec.Command("/usr/bin/gpg", "--unexpected", "--command").Run()
 	if err == nil {
 		t.Fatal("expected mock executor to fail on unexpected command, got nil")
 	}
@@ -551,7 +551,7 @@ func TestMockExecutor_WasCalled(t *testing.T) {
 	mockExec := NewMockExecutor()
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys"}, "output", "", nil)
 
-	mockExec.Execute("/usr/bin/gpg", "--list-keys")
+	mockExec.Command("/usr/bin/gpg", "--list-keys").Run()
 
 	if !mockExec.WasCalled("/usr/bin/gpg", "--list-keys") {
 		t.Error("expected WasCalled to return true for executed command")
@@ -566,21 +566,10 @@ func TestMockExecutor_MultipleCallsSameCommand(t *testing.T) {
 	mockExec := NewMockExecutor()
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys"}, "output1", "", nil)
 
-	mockExec.Execute("/usr/bin/gpg", "--list-keys")
-	mockExec.Execute("/usr/bin/gpg", "--list-keys")
+	mockExec.Command("/usr/bin/gpg", "--list-keys").Run()
+	mockExec.Command("/usr/bin/gpg", "--list-keys").Run()
 
 	if len(mockExec.Calls) != 2 {
 		t.Errorf("expected 2 calls recorded, got %d", len(mockExec.Calls))
-	}
-}
-
-func TestRealExecutor_SetsGNUPGHOME(t *testing.T) {
-	tempDir := t.TempDir()
-
-	executor := &RealExecutor{HomeDir: tempDir}
-
-	_, _, err := executor.Execute("printenv", "GNUPGHOME")
-	if err != nil {
-		t.Fatalf("Execute() failed: %v", err)
 	}
 }

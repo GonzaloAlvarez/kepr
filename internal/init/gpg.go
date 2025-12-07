@@ -23,16 +23,17 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/gpg"
+	"github.com/gonzaloalvarez/kepr/pkg/shell"
 	"github.com/spf13/viper"
 )
 
-func SetupGPG() error {
+func SetupGPG(executor shell.Executor) error {
 	configDir, err := config.Dir()
 	if err != nil {
 		return err
 	}
 
-	g, err := gpg.New(configDir)
+	g, err := gpg.New(configDir, executor)
 	if err != nil {
 		return err
 	}
