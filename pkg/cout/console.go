@@ -16,19 +16,100 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 package cout
 
-type Console interface {
-	Confirm(message string) (bool, error)
-	Input(message string, defaultValue string) (string, error)
+import (
+	"fmt"
+	"log/slog"
+
+	"github.com/pterm/pterm"
+)
+
+type IO interface {
+	Confirm(prompt string) (bool, error)
+	Input(prompt string, defaultValue string) (string, error)
+	Info(a ...interface{})
+	Infoln(a ...interface{})
+	Infof(format string, a ...interface{})
+	Infofln(format string, a ...interface{})
+	Success(a ...interface{})
+	Successln(a ...interface{})
+	Successf(format string, a ...interface{})
+	Successfln(format string, a ...interface{})
+	Warning(message string)
 }
 
-type RealConsole struct{}
+type Terminal struct{}
 
-func (c *RealConsole) Confirm(message string) (bool, error) {
-	return Confirm(message)
+func NewTerminal() *Terminal {
+	return &Terminal{}
 }
 
-func (c *RealConsole) Input(message string, defaultValue string) (string, error) {
-	return Input(message, defaultValue)
+func (t *Terminal) Confirm(prompt string) (bool, error) {
+	slog.Debug("cout: confirm prompt", "message", prompt)
+	result, err := pterm.DefaultInteractiveConfirm.Show(prompt)
+	if err != nil {
+		slog.Error("confirm prompt failed", "error", err)
+		return false, err
+	}
+	slog.Debug("cout: confirm result", "result", result)
+	return result, nil
 }
 
-var DefaultConsole Console = &RealConsole{}
+func (t *Terminal) Input(prompt string, defaultValue string) (string, error) {
+	slog.Debug("cout: input prompt", "message", prompt, "default", defaultValue)
+	result, err := pterm.DefaultInteractiveTextInput.WithDefaultValue(defaultValue).Show(prompt)
+	if err != nil {
+		slog.Error("input prompt failed", "error", err)
+		return "", err
+	}
+	slog.Debug("cout: input result", "result", result)
+	return result, nil
+}
+
+func (t *Terminal) Info(a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprint(a...))
+	pterm.DefaultBasicText.Print(a...)
+}
+
+func (t *Terminal) Infoln(a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprint(a...))
+	pterm.DefaultBasicText.Print(a...)
+	pterm.DefaultBasicText.Print("\n")
+}
+
+func (t *Terminal) Infof(format string, a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprintf(format, a...))
+	pterm.DefaultBasicText.Printf(format, a...)
+}
+
+func (t *Terminal) Infofln(format string, a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprintf(format, a...))
+	pterm.DefaultBasicText.Printf(format, a...)
+	pterm.DefaultBasicText.Print("\n")
+}
+
+func (t *Terminal) Success(a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprint(a...))
+	pterm.FgGreen.Print(a...)
+}
+
+func (t *Terminal) Successln(a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprint(a...))
+	pterm.FgGreen.Print(a...)
+	pterm.FgGreen.Print("\n")
+}
+
+func (t *Terminal) Successf(format string, a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprintf(format, a...))
+	pterm.FgGreen.Printf(format, a...)
+}
+
+func (t *Terminal) Successfln(format string, a ...interface{}) {
+	slog.Debug("cout: " + fmt.Sprintf(format, a...))
+	pterm.FgGreen.Printf(format, a...)
+	pterm.FgGreen.Print("\n")
+}
+
+func (t *Terminal) Warning(message string) {
+	slog.Debug("cout: warning - " + message)
+	pterm.FgRed.Println(message)
+}

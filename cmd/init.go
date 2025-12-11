@@ -30,20 +30,22 @@ var initCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repo := args[0]
 
-		token, err := initialize.AuthGithub()
+		io := cout.NewTerminal()
+
+		token, err := initialize.AuthGithub(io)
 		if err != nil {
 			return err
 		}
 
-		if err := initialize.UserInfo(token); err != nil {
+		if err := initialize.UserInfo(token, io); err != nil {
 			return err
 		}
 
-		if err := initialize.SetupGPG(&shell.SystemExecutor{}); err != nil {
+		if err := initialize.SetupGPG(&shell.SystemExecutor{}, io); err != nil {
 			return err
 		}
 
-		cout.Infofln("Initializing kepr for repo: %s", repo)
+		io.Infofln("Initializing kepr for repo: %s", repo)
 		return nil
 	},
 }

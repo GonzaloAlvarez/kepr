@@ -188,6 +188,7 @@ func TestWriteConfigs(t *testing.T) {
 		ConfigPath:      filepath.Join(tempDir, "gpg.conf"),
 		AgentConfigPath: filepath.Join(tempDir, "gpg-agent.conf"),
 		PinentryPath:    "/usr/bin/pinentry-test",
+		io:              NewMockIO(),
 	}
 
 	err := gpg.writeConfigs()
@@ -227,6 +228,7 @@ func TestWriteConfigs_FilePermissions(t *testing.T) {
 		ConfigPath:      filepath.Join(tempDir, "gpg.conf"),
 		AgentConfigPath: filepath.Join(tempDir, "gpg-agent.conf"),
 		PinentryPath:    "/usr/bin/pinentry",
+		io:              NewMockIO(),
 	}
 
 	err := gpg.writeConfigs()
@@ -260,6 +262,7 @@ func TestWriteConfigs_InvalidPath(t *testing.T) {
 		ConfigPath:      "/nonexistent/path/that/does/not/exist/gpg.conf",
 		AgentConfigPath: "/nonexistent/path/that/does/not/exist/gpg-agent.conf",
 		PinentryPath:    "/usr/bin/pinentry",
+		io:              NewMockIO(),
 	}
 
 	err := gpg.writeConfigs()
@@ -282,6 +285,7 @@ func TestGenerateKeys_Success(t *testing.T) {
 		HomeDir:      tempDir,
 		PinentryPath: "/usr/bin/pinentry",
 		executor:     mockExec,
+		io:           NewMockIO(),
 	}
 
 	fingerprint, err := gpg.GenerateKeys("Test User", "test@example.com")
@@ -318,6 +322,7 @@ func TestGenerateKeys_MasterKeyFails(t *testing.T) {
 		BinaryPath: "/usr/bin/gpg",
 		HomeDir:    tempDir,
 		executor:   mockExec,
+		io:         NewMockIO(),
 	}
 
 	_, err := gpg.GenerateKeys("Test User", "test@example.com")
@@ -344,6 +349,7 @@ func TestGenerateKeys_SubkeyFails(t *testing.T) {
 		BinaryPath: "/usr/bin/gpg",
 		HomeDir:    tempDir,
 		executor:   mockExec,
+		io:         NewMockIO(),
 	}
 
 	_, err := gpg.GenerateKeys("Test User", "test@example.com")
@@ -367,6 +373,7 @@ func TestGetFingerprint_Success(t *testing.T) {
 		BinaryPath: "/usr/bin/gpg",
 		HomeDir:    tempDir,
 		executor:   mockExec,
+		io:         NewMockIO(),
 	}
 
 	fingerprint, err := gpg.getFingerprint()
@@ -391,6 +398,7 @@ func TestGetFingerprint_ListKeysFails(t *testing.T) {
 		BinaryPath: "/usr/bin/gpg",
 		HomeDir:    tempDir,
 		executor:   mockExec,
+		io:         NewMockIO(),
 	}
 
 	_, err := gpg.getFingerprint()
@@ -414,6 +422,7 @@ func TestGetFingerprint_NoFingerprintInOutput(t *testing.T) {
 		BinaryPath: "/usr/bin/gpg",
 		HomeDir:    tempDir,
 		executor:   mockExec,
+		io:         NewMockIO(),
 	}
 
 	_, err := gpg.getFingerprint()
@@ -437,6 +446,7 @@ func TestProcessMasterKey_ExportFails(t *testing.T) {
 		BinaryPath: "/usr/bin/gpg",
 		HomeDir:    tempDir,
 		executor:   mockExec,
+		io:         NewMockIO(),
 	}
 
 	err := gpg.ProcessMasterKey("TESTFINGERPRINT")
@@ -460,6 +470,7 @@ func TestProcessMasterKey_EmptySecretKey(t *testing.T) {
 		BinaryPath: "/usr/bin/gpg",
 		HomeDir:    tempDir,
 		executor:   mockExec,
+		io:         NewMockIO(),
 	}
 
 	err := gpg.ProcessMasterKey("TESTFINGERPRINT")
@@ -484,6 +495,7 @@ func TestGenerateKeys_FingerprintRetrievalFails(t *testing.T) {
 		BinaryPath: "/usr/bin/gpg",
 		HomeDir:    tempDir,
 		executor:   mockExec,
+		io:         NewMockIO(),
 	}
 
 	_, err := gpg.GenerateKeys("Test User", "test@example.com")
@@ -509,6 +521,7 @@ func TestGenerateKeys_WithSpecialCharactersInName(t *testing.T) {
 		BinaryPath: "/usr/bin/gpg",
 		HomeDir:    tempDir,
 		executor:   mockExec,
+		io:         NewMockIO(),
 	}
 
 	fingerprint, err := gpg.GenerateKeys("Test User (Comment) <tag>", "test+tag@example.com")

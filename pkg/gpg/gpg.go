@@ -35,6 +35,7 @@ type GPG struct {
 	AgentConfigPath string
 	ConfigPath      string
 	executor        shell.Executor
+	io              cout.IO
 }
 
 func findPinentry(executor shell.Executor) (string, error) {
@@ -51,7 +52,7 @@ func findPinentry(executor shell.Executor) (string, error) {
 	return "", fmt.Errorf("no pinentry program found (tried: %v)", candidates)
 }
 
-func New(configBaseDir string, executor shell.Executor) (*GPG, error) {
+func New(configBaseDir string, executor shell.Executor, io cout.IO) (*GPG, error) {
 	gpgBinary, err := executor.LookPath("gpg")
 	if err != nil {
 		return nil, fmt.Errorf("gpg binary not found: %w", err)
@@ -76,6 +77,7 @@ func New(configBaseDir string, executor shell.Executor) (*GPG, error) {
 		AgentConfigPath: filepath.Join(homeDir, "gpg-agent.conf"),
 		ConfigPath:      filepath.Join(homeDir, "gpg.conf"),
 		executor:        executor,
+		io:              io,
 	}
 
 	if err := gpg.writeConfigs(); err != nil {
@@ -211,13 +213,13 @@ func (g *GPG) ProcessMasterKey(fingerprint string) error {
 		return fmt.Errorf("exported secret key is empty")
 	}
 
-	cout.WarningMessage("WARNING: The Master Key below will be DELETED from this machine immediately after this step.")
-	cout.Infoln("")
-	cout.Info(secretKey)
-	cout.Infoln("")
-	cout.Infoln("Copy the key block above and save it to a secure location (e.g., Bitwarden, 1Password, or a Gmail Draft).")
+	g.io.Warning("WARNING: The Master Key below will be DELETED from this machine immediately after this step.")
+	g.io.Infoln("")
+	g.io.Info(secretKey)
+	g.io.Infoln("")
+	g.io.Infoln("Copy the key block above and save it to a secure location (e.g., Bitwarden, 1Password, or a Gmail Draft).")
 
-	confirmed, err := cout.Confirm("Have you saved the Private Key safely? This action cannot be undone.")
+	confirmed, err := g.io.Confirm("Have you saved the Private Key safely? This action cannot be undone.")
 	if err != nil {
 		return fmt.Errorf("confirmation failed: %w", err)
 	}
@@ -234,7 +236,7 @@ func (g *GPG) ProcessMasterKey(fingerprint string) error {
 	}
 
 	slog.Debug("master key deleted from local keyring")
-	cout.Successln("Master key has been removed from this machine.")
+	g.io.Successln("Master key has been removed from this machine.")
 
 	return nil
 }

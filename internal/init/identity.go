@@ -28,7 +28,7 @@ import (
 
 const githubClientID = "Iv23li6c8kmcEmGBK3yC"
 
-func AuthGithub() (string, error) {
+func AuthGithub(io cout.IO) (string, error) {
 	token := viper.GetString("github_token")
 	if token == "" {
 		slog.Debug("no token found locally, starting authentication")
@@ -42,16 +42,16 @@ func AuthGithub() (string, error) {
 			return "", fmt.Errorf("failed to save token: %w", err)
 		}
 
-		cout.Successln("Authentication successful.")
+		io.Successln("Authentication successful.")
 	} else {
 		slog.Debug("token foundlocally , skipping authentication")
-		cout.Infoln("Already authenticated.")
+		io.Infoln("Already authenticated.")
 	}
 
 	return token, nil
 }
 
-func UserInfo(token string) error {
+func UserInfo(token string, io cout.IO) error {
 	userName := viper.GetString("user_name")
 	userEmail := viper.GetString("user_email")
 	if userName == "" || userEmail == "" {
@@ -63,21 +63,21 @@ func UserInfo(token string) error {
 			return fmt.Errorf("failed to fetch user identity: %w", err)
 		}
 
-		cout.Infofln("Detected identity: %s <%s>", name, email)
+		io.Infofln("Detected identity: %s <%s>", name, email)
 
-		confirmed, err := cout.Confirm(fmt.Sprintf("Is this identity correct? [%s <%s>]", name, email))
+		confirmed, err := io.Confirm(fmt.Sprintf("Is this identity correct? [%s <%s>]", name, email))
 		if err != nil {
 			return fmt.Errorf("confirmation failed: %w", err)
 		}
 
 		if !confirmed {
 			slog.Debug("user rejected identity, requesting correction")
-			name, err = cout.Input("Correct Name:", name)
+			name, err = io.Input("Correct Name:", name)
 			if err != nil {
 				return fmt.Errorf("failed to get name: %w", err)
 			}
 
-			email, err = cout.Input("Correct Email:", email)
+			email, err = io.Input("Correct Email:", email)
 			if err != nil {
 				return fmt.Errorf("failed to get email: %w", err)
 			}
@@ -87,9 +87,9 @@ func UserInfo(token string) error {
 			return fmt.Errorf("failed to save user identity: %w", err)
 		}
 
-		cout.Successfln("User identity saved: %s <%s>", name, email)
+		io.Successfln("User identity saved: %s <%s>", name, email)
 	} else {
-		cout.Successfln("Welcome back, %s!", userName)
+		io.Successfln("Welcome back, %s!", userName)
 		slog.Debug("user identity already configured", "name", userName, "email", userEmail)
 	}
 

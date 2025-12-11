@@ -27,18 +27,18 @@ import (
 	"github.com/spf13/viper"
 )
 
-func SetupGPG(executor shell.Executor) error {
+func SetupGPG(executor shell.Executor, io cout.IO) error {
 	configDir, err := config.Dir()
 	if err != nil {
 		return err
 	}
 
-	g, err := gpg.New(configDir, executor)
+	g, err := gpg.New(configDir, executor, io)
 	if err != nil {
 		return err
 	}
 
-	cout.Successfln("GPG environment initialized at %s", g.HomeDir)
+	io.Successfln("GPG environment initialized at %s", g.HomeDir)
 
 	fingerprint := viper.GetString("user_fingerprint")
 	if fingerprint == "" {
