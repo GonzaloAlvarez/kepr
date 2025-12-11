@@ -28,12 +28,12 @@ import (
 
 const githubClientID = "Iv23li6c8kmcEmGBK3yC"
 
-func AuthGithub(io cout.IO) (string, error) {
+func AuthGithub(client github.Client, io cout.IO) (string, error) {
 	token := viper.GetString("github_token")
 	if token == "" {
 		slog.Debug("no token found locally, starting authentication")
 		var err error
-		token, err = github.Authenticate(githubClientID)
+		token, err = client.Authenticate(githubClientID, io)
 		if err != nil {
 			return "", fmt.Errorf("authentication failed: %w", err)
 		}
@@ -51,14 +51,13 @@ func AuthGithub(io cout.IO) (string, error) {
 	return token, nil
 }
 
-func UserInfo(token string, io cout.IO) error {
+func UserInfo(client github.Client, io cout.IO) error {
 	userName := viper.GetString("user_name")
 	userEmail := viper.GetString("user_email")
 	if userName == "" || userEmail == "" {
 		slog.Debug("user identity not found locally, fetching from GitHub")
-		client := github.NewClient(token)
 
-		name, email, err := github.FetchUserIdentity(client)
+		name, email, err := client.GetUserIdentity()
 		if err != nil {
 			return fmt.Errorf("failed to fetch user identity: %w", err)
 		}

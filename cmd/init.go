@@ -19,6 +19,7 @@ package cmd
 import (
 	initialize "github.com/gonzaloalvarez/kepr/internal/init"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
+	"github.com/gonzaloalvarez/kepr/pkg/github"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 	"github.com/spf13/cobra"
 )
@@ -31,13 +32,16 @@ var initCmd = &cobra.Command{
 		repo := args[0]
 
 		io := cout.NewTerminal()
+		ghClient := github.NewGitHubClient()
 
-		token, err := initialize.AuthGithub(io)
+		token, err := initialize.AuthGithub(ghClient, io)
 		if err != nil {
 			return err
 		}
 
-		if err := initialize.UserInfo(token, io); err != nil {
+		ghClient.SetToken(token)
+
+		if err := initialize.UserInfo(ghClient, io); err != nil {
 			return err
 		}
 
