@@ -27,26 +27,32 @@ import (
 
 var debugMode bool
 
-var rootCmd = &cobra.Command{
-	Use:          "kepr",
-	Short:        "Encrypted distributed key-value store backed by Git and YubiKey",
-	SilenceUsage: true,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		initLogging()
+func NewRootCmd(app *App) *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:          "kepr",
+		Short:        "Encrypted distributed key-value store backed by Git and YubiKey",
+		SilenceUsage: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			initLogging()
 
-		slog.Debug("starting kepr")
+			slog.Debug("starting kepr")
 
-		if err := config.Init(); err != nil {
-			return fmt.Errorf("failed to initialize: %w", err)
-		}
-		slog.Debug("initialization complete")
+			if err := config.Init(); err != nil {
+				return fmt.Errorf("failed to initialize: %w", err)
+			}
+			slog.Debug("initialization complete")
 
-		return nil
-	},
-}
+			return nil
+		},
+	}
 
-func init() {
 	rootCmd.PersistentFlags().BoolVarP(&debugMode, "debug", "d", false, "enable debug logging")
+
+	rootCmd.AddCommand(NewInitCmd(app))
+	rootCmd.AddCommand(NewAddCmd(app))
+	rootCmd.AddCommand(NewGetCmd(app))
+
+	return rootCmd
 }
 
 func initLogging() {
@@ -59,10 +65,4 @@ func initLogging() {
 		Level: level,
 	})
 	slog.SetDefault(slog.New(handler))
-}
-
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
 }

@@ -17,21 +17,18 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
-	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/spf13/cobra"
 )
 
-var getCmd = &cobra.Command{
-	Use:   "get [key]",
-	Short: "Retrieve a secret from the store",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		key := args[0]
-		cout.Infofln("Getting secret: %s", key)
-		return nil
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(getCmd)
+func NewGetCmd(app *App) *cobra.Command {
+	return &cobra.Command{
+		Use:   "get [key]",
+		Short: "Retrieve a secret from the store",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key := args[0]
+			app.UI.Infofln("Getting secret: %s", key)
+			return nil
+		},
+	}
 }

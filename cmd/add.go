@@ -19,30 +19,27 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/spf13/cobra"
 )
 
-var addCmd = &cobra.Command{
-	Use:   "add [key] [value]",
-	Short: "Add a secret to the store",
-	Args:  cobra.RangeArgs(1, 2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		key := args[0]
-		var value string
+func NewAddCmd(app *App) *cobra.Command {
+	return &cobra.Command{
+		Use:   "add [key] [value]",
+		Short: "Add a secret to the store",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key := args[0]
+			var value string
 
-		if len(args) == 2 {
-			value = args[1]
-		} else {
-			return fmt.Errorf("interactive prompt not implemented yet, please provide value argument")
-		}
+			if len(args) == 2 {
+				value = args[1]
+			} else {
+				return fmt.Errorf("interactive prompt not implemented yet, please provide value argument")
+			}
 
-		cout.Infofln("Adding secret: %s", key)
-		_ = value
-		return nil
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(addCmd)
+			app.UI.Infofln("Adding secret: %s", key)
+			_ = value
+			return nil
+		},
+	}
 }

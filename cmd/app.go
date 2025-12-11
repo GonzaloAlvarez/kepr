@@ -14,26 +14,16 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
-package main
+package cmd
 
 import (
-	"os"
-
-	"github.com/gonzaloalvarez/kepr/cmd"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/github"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func main() {
-	app := &cmd.App{
-		Shell:  &shell.SystemExecutor{},
-		UI:     cout.NewTerminal(),
-		GitHub: github.NewGitHubClient(),
-	}
-
-	rootCmd := cmd.NewRootCmd(app)
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+type App struct {
+	Shell  shell.Executor
+	UI     cout.IO
+	GitHub github.Client
 }

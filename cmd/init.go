@@ -18,42 +18,34 @@ package cmd
 
 import (
 	initialize "github.com/gonzaloalvarez/kepr/internal/init"
-	"github.com/gonzaloalvarez/kepr/pkg/cout"
-	"github.com/gonzaloalvarez/kepr/pkg/github"
-	"github.com/gonzaloalvarez/kepr/pkg/shell"
 	"github.com/spf13/cobra"
 )
 
-var initCmd = &cobra.Command{
-	Use:   "init [username/repo]",
-	Short: "Initialize a new kepr repository",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		repo := args[0]
+func NewInitCmd(app *App) *cobra.Command {
+	return &cobra.Command{
+		Use:   "init [username/repo]",
+		Short: "Initialize a new kepr repository",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repo := args[0]
 
-		io := cout.NewTerminal()
-		ghClient := github.NewGitHubClient()
+			token, err := initialize.AuthGithub(app.GitHub, app.UI)
+			if err != nil {
+				return err
+			}
 
-		token, err := initialize.AuthGithub(ghClient, io)
-		if err != nil {
-			return err
-		}
+			app.GitHub.SetToken(token)
 
-		ghClient.SetToken(token)
+			if err := initialize.UserInfo(app.GitHub, app.UI); err != nil {
+				return err
+			}
 
-		if err := initialize.UserInfo(ghClient, io); err != nil {
-			return err
-		}
+			if err := initialize.SetupGPG(app.Shell, app.UI); err != nil {
+				return err
+			}
 
-		if err := initialize.SetupGPG(&shell.SystemExecutor{}, io); err != nil {
-			return err
-		}
-
-		io.Infofln("Initializing kepr for repo: %s", repo)
-		return nil
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(initCmd)
+			app.UI.Infofln("Initializing kepr for repo: %s", repo)
+			return nil
+		},
+	}
 }
