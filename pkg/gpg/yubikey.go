@@ -21,6 +21,8 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+
+	"github.com/gonzaloalvarez/kepr/pkg/config"
 )
 
 type Yubikey struct {
@@ -68,6 +70,8 @@ func (g *GPG) InitYubikey() error {
 		return fmt.Errorf("no card found")
 	}
 
+	slog.Debug("card status output", "stdout", stdout, "stderr", stderr)
+
 	yubikey, err := parseCardStatus(stdout)
 	if err != nil {
 		return fmt.Errorf("failed to parse card status: %w", err)
@@ -77,6 +81,10 @@ func (g *GPG) InitYubikey() error {
 	slog.Debug("yubikey initialized", "serial", yubikey.SerialNumber,
 		"sig_occupied", yubikey.SignatureOccupied,
 		"enc_occupied", yubikey.EncryptionOccupied)
+
+	if err := g.configureYubikey(); err != nil {
+		return fmt.Errorf("failed to configure yubikey: %w", err)
+	}
 
 	return nil
 }
@@ -104,6 +112,7 @@ func parseCardStatus(output string) (*Yubikey, error) {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
 				yubikey.CardholderName = strings.TrimSpace(parts[1])
+				slog.Debug("found cardholder name", "name", yubikey.CardholderName)
 			}
 		} else if strings.Contains(line, "Signature key") {
 			slog.Debug("found signature key line", "line", line)
@@ -148,4 +157,44 @@ func extractFingerprint(line string) string {
 
 func (y *Yubikey) IsOccupied() bool {
 	return y.SignatureOccupied || y.EncryptionOccupied
+}
+
+func (g *GPG) cardEdit(attribute, value string) error {
+	stdin := fmt.Sprintf("admin\n%s\n%s\nquit\n", attribute, value)
+
+	slog.Debug("editing card", "attribute", attribute)
+
+	_, stderr, err := g.executeWithPinentry(stdin, "--quiet", "--card-edit", "--expert", "--batch", "--display-charset", "utf-8", "--command-fd", "3")
+	if err != nil {
+		slog.Debug("card edit failed", "error", err, "stderr", stderr)
+		return fmt.Errorf("failed to edit card attribute %s: %w", attribute, err)
+	}
+
+	return nil
+}
+
+func (g *GPG) configureYubikey() error {
+	if g.Yubikey.CardholderName != "" {
+		slog.Debug("yubikey already configured", "cardholder", g.Yubikey.CardholderName)
+		return nil
+	}
+
+	slog.Debug("configuring yubikey")
+
+	name := config.GetUserName()
+	if name == "" {
+		slog.Debug("no user name in config, skipping configuration")
+		return nil
+	} else {
+		slog.Debug("user name in config", "name", name)
+	}
+
+	if err := g.cardEdit("name", name); err != nil {
+		return err
+	}
+
+	g.Yubikey.CardholderName = name
+	slog.Debug("yubikey configured", "cardholder", name)
+
+	return nil
 }

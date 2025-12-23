@@ -112,6 +112,18 @@ func SaveFingerprint(fingerprint string) error {
 	return writeConfig()
 }
 
+func GetUserName() string {
+	return viper.GetString("user_name")
+}
+
+func GetUserEmail() string {
+	return viper.GetString("user_email")
+}
+
+func GetUserFingerprint() string {
+	return viper.GetString("user_fingerprint")
+}
+
 func writeConfig() error {
 	dir, err := Dir()
 	if err != nil {

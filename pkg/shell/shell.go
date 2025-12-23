@@ -18,7 +18,9 @@ package shell
 
 import (
 	"io"
+	"os"
 	"os/exec"
+	"strings"
 )
 
 // Cmd is an interface that mirrors exec.Cmd methods needed by the application.
@@ -28,8 +30,12 @@ type Cmd interface {
 	SetStdin(r io.Reader)
 	SetStdout(w io.Writer)
 	SetStderr(w io.Writer)
+	GetEnv(key string) string
+	SetExtraFiles([]*os.File)
 	Output() ([]byte, error)
 	Run() error
+	Start() error
+	Wait() error
 	CombinedOutput() ([]byte, error)
 }
 
@@ -52,6 +58,19 @@ func (c *SystemCmd) SetEnv(env []string) {
 	c.cmd.Env = env
 }
 
+func (c *SystemCmd) SetExtraFiles(files []*os.File) {
+	c.cmd.ExtraFiles = files
+}
+
+func (c *SystemCmd) GetEnv(key string) string {
+	for _, env := range c.cmd.Env {
+		if strings.HasPrefix(env, key+"=") {
+			return strings.TrimPrefix(env, key+"=")
+		}
+	}
+	return ""
+}
+
 func (c *SystemCmd) SetStdin(r io.Reader) {
 	c.cmd.Stdin = r
 }
@@ -70,6 +89,14 @@ func (c *SystemCmd) Output() ([]byte, error) {
 
 func (c *SystemCmd) Run() error {
 	return c.cmd.Run()
+}
+
+func (c *SystemCmd) Start() error {
+	return c.cmd.Start()
+}
+
+func (c *SystemCmd) Wait() error {
+	return c.cmd.Wait()
 }
 
 func (c *SystemCmd) CombinedOutput() ([]byte, error) {

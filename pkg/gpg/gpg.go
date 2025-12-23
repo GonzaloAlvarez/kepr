@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -29,14 +30,15 @@ import (
 )
 
 type GPG struct {
-	BinaryPath      string
-	PinentryPath    string
-	HomeDir         string
-	AgentConfigPath string
-	ConfigPath      string
-	executor        shell.Executor
-	io              cout.IO
-	Yubikey         *Yubikey
+	BinaryPath         string
+	PinentryPath       string
+	HomeDir            string
+	AgentConfigPath    string
+	ConfigPath         string
+	SCDaemonConfigPath string
+	executor           shell.Executor
+	io                 cout.IO
+	Yubikey            *Yubikey
 }
 
 func findPinentry(executor shell.Executor) (string, error) {
@@ -72,13 +74,14 @@ func New(configBaseDir string, executor shell.Executor, io cout.IO) (*GPG, error
 	}
 
 	gpg := &GPG{
-		BinaryPath:      gpgBinary,
-		PinentryPath:    pinentryBinary,
-		HomeDir:         homeDir,
-		AgentConfigPath: filepath.Join(homeDir, "gpg-agent.conf"),
-		ConfigPath:      filepath.Join(homeDir, "gpg.conf"),
-		executor:        executor,
-		io:              io,
+		BinaryPath:         gpgBinary,
+		PinentryPath:       pinentryBinary,
+		HomeDir:            homeDir,
+		AgentConfigPath:    filepath.Join(homeDir, "gpg-agent.conf"),
+		ConfigPath:         filepath.Join(homeDir, "gpg.conf"),
+		SCDaemonConfigPath: filepath.Join(homeDir, "scdaemon.conf"),
+		executor:           executor,
+		io:                 io,
 	}
 
 	if err := gpg.writeConfigs(); err != nil {
@@ -103,6 +106,13 @@ func (g *GPG) writeConfigs() error {
 		return fmt.Errorf("failed to write gpg-agent.conf: %w", err)
 	}
 
+	scDaemonConf := generateSCDaemonConf()
+
+	slog.Debug("writing scdaemon.conf", "path", g.SCDaemonConfigPath)
+	if err := os.WriteFile(g.SCDaemonConfigPath, []byte(scDaemonConf), 0600); err != nil {
+		return fmt.Errorf("failed to write scdaemon.conf: %w", err)
+	}
+
 	return nil
 }
 
@@ -114,6 +124,12 @@ keyid-format 0xlong
 with-fingerprint
 list-options show-uid-validity
 verify-options show-uid-validity
+`
+}
+
+func generateSCDaemonConf() string {
+	return `disable-ccid
+pcsc-shared
 `
 }
 
@@ -174,6 +190,52 @@ func (g *GPG) execute(stdin string, args ...string) (string, string, error) {
 	}
 
 	err := cmd.Run()
+	return stdoutBuf.String(), stderrBuf.String(), err
+}
+
+func (g *GPG) executeWithPinentry(stdin string, args ...string) (string, string, error) {
+	cmd := g.executor.Command(g.BinaryPath, args...)
+	cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir)))
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create pipe: %w", err)
+	}
+	defer pr.Close()
+
+	tty := cmd.GetEnv("GPG_TTY")
+	if tty == "" {
+		if out, err := exec.Command("tty").Output(); err == nil {
+			tty = strings.TrimSpace(string(out))
+		}
+	}
+
+	if tty != "" {
+		cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GPG_TTY=%s", tty)))
+	}
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.SetStdout(&stdoutBuf)
+	cmd.SetStderr(&stderrBuf)
+
+	cmd.SetExtraFiles([]*os.File{pr})
+	cmd.SetStdin(os.Stdin)
+
+	err = cmd.Start()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to start command: %w", err)
+	}
+
+	go func() {
+		pw.Write([]byte(stdin))
+		pw.Close()
+	}()
+
+	err = cmd.Wait()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to wait for command: %w", err)
+	}
+
 	return stdoutBuf.String(), stderrBuf.String(), err
 }
 
