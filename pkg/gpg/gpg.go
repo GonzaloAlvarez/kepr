@@ -36,6 +36,7 @@ type GPG struct {
 	ConfigPath      string
 	executor        shell.Executor
 	io              cout.IO
+	Yubikey         *Yubikey
 }
 
 func findPinentry(executor shell.Executor) (string, error) {
