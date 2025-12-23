@@ -79,39 +79,44 @@ func SetupGPG(executor shell.Executor, io cout.IO) error {
 func checkYubikey(g *gpg.GPG, io cout.IO) error {
 	slog.Debug("checking for YubiKey")
 
-	for {
-		err := g.InitYubikey()
+	err := g.CheckCardPresent()
+	if err != nil {
+		slog.Debug("no YubiKey detected, prompting user")
+		retry, confirmErr := io.Confirm("No YubiKey detected. Please insert your YubiKey and retry?")
+		if confirmErr != nil {
+			return fmt.Errorf("failed to get user confirmation: %w", confirmErr)
+		}
+
+		if !retry {
+			io.Warning("YubiKey is required to continue. Exiting.")
+			return fmt.Errorf("YubiKey not detected and user chose not to retry")
+		}
+
+		err = g.CheckCardPresent()
 		if err != nil {
-			slog.Debug("no YubiKey detected, prompting user")
-			retry, confirmErr := io.Confirm("No YubiKey detected. Please insert your YubiKey and retry?")
-			if confirmErr != nil {
-				return fmt.Errorf("failed to get user confirmation: %w", confirmErr)
-			}
+			io.Warning("YubiKey still not detected. Exiting.")
+			return fmt.Errorf("YubiKey not detected after retry")
+		}
+	}
 
-			if !retry {
-				io.Warning("YubiKey is required to continue. Exiting.")
-				return fmt.Errorf("YubiKey not detected and user chose not to retry")
-			}
+	if err := g.InitYubikey(); err != nil {
+		return fmt.Errorf("failed to initialize YubiKey: %w", err)
+	}
 
-			continue
+	if g.Yubikey.IsOccupied() {
+		io.Warning("WARNING: YubiKey slots are already occupied with existing keys.")
+		io.Infoln("This may overwrite existing keys on the YubiKey.")
+		proceed, confirmErr := io.Confirm("Do you want to proceed?")
+		if confirmErr != nil {
+			return fmt.Errorf("failed to get user confirmation: %w", confirmErr)
 		}
 
-		if g.Yubikey.IsOccupied() {
-			io.Warning("WARNING: YubiKey slots are already occupied with existing keys.")
-			io.Infoln("This may overwrite existing keys on the YubiKey.")
-			proceed, confirmErr := io.Confirm("Do you want to proceed?")
-			if confirmErr != nil {
-				return fmt.Errorf("failed to get user confirmation: %w", confirmErr)
-			}
-
-			if !proceed {
-				return fmt.Errorf("user chose not to proceed with occupied YubiKey")
-			}
-			io.Successfln("YubiKey detected and ready for configuration (Serial: %s).", g.Yubikey.SerialNumber)
-		} else {
-			io.Successfln("YubiKey detected with available slots (Serial: %s).", g.Yubikey.SerialNumber)
+		if !proceed {
+			return fmt.Errorf("user chose not to proceed with occupied YubiKey")
 		}
-		break
+		io.Successfln("YubiKey detected and ready for configuration (Serial: %s).", g.Yubikey.SerialNumber)
+	} else {
+		io.Successfln("YubiKey detected with available slots (Serial: %s).", g.Yubikey.SerialNumber)
 	}
 
 	return nil

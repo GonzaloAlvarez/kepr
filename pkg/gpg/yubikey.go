@@ -34,6 +34,25 @@ type Yubikey struct {
 	EncryptionOccupied bool
 }
 
+func (g *GPG) CheckCardPresent() error {
+	slog.Debug("checking if card is present")
+
+	stdout, stderr, err := g.execute("", "--card-status")
+	if err != nil {
+		slog.Debug("card status command failed", "error", err, "stderr", stderr)
+		return fmt.Errorf("no card found")
+	}
+
+	if strings.Contains(stdout, "no card") || strings.Contains(stderr, "no card") ||
+		strings.Contains(stdout, "Card not present") || strings.Contains(stderr, "Card not present") {
+		slog.Debug("card not present in output")
+		return fmt.Errorf("no card found")
+	}
+
+	slog.Debug("card is present")
+	return nil
+}
+
 func (g *GPG) InitYubikey() error {
 	slog.Debug("initializing yubikey")
 
