@@ -159,10 +159,11 @@ func (y *Yubikey) IsOccupied() bool {
 	return y.SignatureOccupied || y.EncryptionOccupied
 }
 
-func (g *GPG) cardEdit(attribute, value string) error {
-	stdin := fmt.Sprintf("admin\n%s\n%s\nquit\n", attribute, value)
+func (g *GPG) cardEdit(attribute string, values []string) error {
+	valuesStr := strings.Join(values, "\n")
+	stdin := fmt.Sprintf("admin\n%s\n%s\nquit\n", attribute, valuesStr)
 
-	slog.Debug("editing card", "attribute", attribute)
+	slog.Debug("editing card", "attribute", attribute, "values", values)
 
 	_, stderr, err := g.executeWithPinentry(stdin, "--quiet", "--card-edit", "--expert", "--batch", "--display-charset", "utf-8", "--command-fd", "3")
 	if err != nil {
@@ -189,7 +190,18 @@ func (g *GPG) configureYubikey() error {
 		slog.Debug("user name in config", "name", name)
 	}
 
-	if err := g.cardEdit("name", name); err != nil {
+	parts := strings.Fields(name)
+	var firstName, lastName string
+	if len(parts) > 0 {
+		firstName = parts[0]
+		if len(parts) > 1 {
+			lastName = strings.Join(parts[1:], " ")
+		}
+	}
+
+	slog.Debug("split name", "firstName", firstName, "lastName", lastName)
+
+	if err := g.cardEdit("name", []string{lastName, firstName}); err != nil {
 		return err
 	}
 
