@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
@@ -54,14 +55,21 @@ func (p *Pass) Init(fingerprint string) error {
 
 	slog.Debug("found gopass binary", "path", gopassPath)
 
+	userName := config.GetUserName()
+	userEmail := config.GetUserEmail()
+
 	cmd := p.executor.Command(gopassPath, "init", "--path", p.SecretsPath, "--crypto", "gpg", fingerprint)
-	cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", p.GpgHome)))
+	cmd.SetEnv(append(os.Environ(),
+		fmt.Sprintf("GNUPGHOME=%s", p.GpgHome),
+		fmt.Sprintf("GIT_AUTHOR_NAME=%s", userName),
+		fmt.Sprintf("GIT_AUTHOR_EMAIL=%s", userEmail),
+	))
 
 	var stderr bytes.Buffer
 	cmd.SetStdout(os.Stdout)
 	cmd.SetStderr(&stderr)
 
-	slog.Debug("executing gopass init")
+	slog.Debug("executing gopass init", "git_author_name", userName, "git_author_email", userEmail)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("gopass init failed: %w, stderr: %s", err, stderr.String())
 	}
