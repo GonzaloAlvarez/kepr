@@ -174,8 +174,20 @@ func (g *GPG) cardEdit(attribute string, values []string) error {
 	return nil
 }
 
+func splitName(name string) (string, string) {
+	parts := strings.Fields(name)
+	var firstName, lastName string
+	if len(parts) > 0 {
+		firstName = parts[0]
+		if len(parts) > 1 {
+			lastName = strings.Join(parts[1:], " ")
+		}
+	}
+	return firstName, lastName
+}
+
 func (g *GPG) configureYubikey() error {
-	if g.Yubikey.CardholderName != "" {
+	if g.Yubikey.CardholderName != "" && g.Yubikey.CardholderName != "[not set]" {
 		slog.Debug("yubikey already configured", "cardholder", g.Yubikey.CardholderName)
 		return nil
 	}
@@ -185,28 +197,27 @@ func (g *GPG) configureYubikey() error {
 	name := config.GetUserName()
 	if name == "" {
 		slog.Debug("no user name in config, skipping configuration")
-		return nil
 	} else {
 		slog.Debug("user name in config", "name", name)
+		firstName, lastName := splitName(name)
+		slog.Debug("split name", "firstName", firstName, "lastName", lastName)
+
+		if err := g.cardEdit("name", []string{lastName, firstName}); err != nil {
+			return err
+		}
+
+		g.Yubikey.CardholderName = name
 	}
 
-	parts := strings.Fields(name)
-	var firstName, lastName string
-	if len(parts) > 0 {
-		firstName = parts[0]
-		if len(parts) > 1 {
-			lastName = strings.Join(parts[1:], " ")
+	email := config.GetUserEmail()
+	if email == "" {
+		slog.Debug("no user email in config, skipping configuration")
+	} else {
+		slog.Debug("user email in config", "email", email)
+		if err := g.cardEdit("login", []string{email}); err != nil {
+			return err
 		}
 	}
-
-	slog.Debug("split name", "firstName", firstName, "lastName", lastName)
-
-	if err := g.cardEdit("name", []string{lastName, firstName}); err != nil {
-		return err
-	}
-
-	g.Yubikey.CardholderName = name
-	slog.Debug("yubikey configured", "cardholder", name)
 
 	return nil
 }
