@@ -18,6 +18,7 @@ package cmd
 
 import (
 	initialize "github.com/gonzaloalvarez/kepr/internal/init"
+	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -44,6 +45,19 @@ func NewInitCmd(app *App) *cobra.Command {
 				return err
 			}
 
+			configDir, err := config.Dir()
+			if err != nil {
+				return err
+			}
+
+			gpgHome := configDir + "/gpg"
+			fingerprint := config.GetUserFingerprint()
+
+			if err := initialize.SetupPasswordStore(configDir, gpgHome, fingerprint, app.Shell, app.UI); err != nil {
+				return err
+			}
+
+			app.UI.Infofln("Initializing kepr for repo: %s", repo)
 			return nil
 		},
 	}

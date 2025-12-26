@@ -57,16 +57,16 @@ func (p *Pass) Init(fingerprint string) error {
 	cmd := p.executor.Command(gopassPath, "init", "--path", p.SecretsPath, "--crypto", "gpg", fingerprint)
 	cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", p.GpgHome)))
 
-	var stdout, stderr bytes.Buffer
-	cmd.SetStdout(&stdout)
+	var stderr bytes.Buffer
+	cmd.SetStdout(os.Stdout)
 	cmd.SetStderr(&stderr)
 
 	slog.Debug("executing gopass init")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("gopass init failed: %w, stdout: %s, stderr: %s", err, stdout.String(), stderr.String())
+		return fmt.Errorf("gopass init failed: %w, stderr: %s", err, stderr.String())
 	}
 
-	slog.Debug("gopass init successful", "stdout", stdout.String())
+	slog.Debug("gopass init successful")
 
 	if err := p.writeGitignore(); err != nil {
 		return fmt.Errorf("failed to write .gitignore: %w", err)
