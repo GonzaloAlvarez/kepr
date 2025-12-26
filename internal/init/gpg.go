@@ -19,12 +19,12 @@ package initialize
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
-	"github.com/spf13/viper"
 )
 
 func SetupGPG(executor shell.Executor, io cout.IO) error {
@@ -40,11 +40,11 @@ func SetupGPG(executor shell.Executor, io cout.IO) error {
 
 	io.Successfln("GPG environment initialized at %s", g.HomeDir)
 
-	fingerprint := viper.GetString("user_fingerprint")
+	fingerprint := config.GetUserFingerprint()
 	if fingerprint == "" {
 		slog.Debug("no fingerprint found, generating keys")
-		userName := viper.GetString("user_name")
-		userEmail := viper.GetString("user_email")
+		userName := config.GetUserName()
+		userEmail := config.GetUserEmail()
 
 		if userName == "" || userEmail == "" {
 			return fmt.Errorf("user identity not configured")
@@ -57,26 +57,27 @@ func SetupGPG(executor shell.Executor, io cout.IO) error {
 
 		cout.Successfln("Generated Identity: %s", fingerprint)
 
-		if err := g.ProcessMasterKey(fingerprint); err != nil {
-			return fmt.Errorf("failed to process master key: %w", err)
-		}
-
 		if err := config.SaveFingerprint(fingerprint); err != nil {
 			return fmt.Errorf("failed to save fingerprint: %w", err)
 		}
+
+		if err := g.BackupMasterKey(fingerprint); err != nil {
+			return fmt.Errorf("failed to process master key: %w", err)
+		}
+
+		if err := initYubikey(g, io); err != nil {
+			return err
+		}
+
 	} else {
 		slog.Debug("fingerprint already exists", "fingerprint", fingerprint)
 		io.Infofln("Using existing GPG key: %s", fingerprint)
 	}
 
-	if err := checkYubikey(g, io); err != nil {
-		return err
-	}
-
 	return nil
 }
 
-func checkYubikey(g *gpg.GPG, io cout.IO) error {
+func initYubikey(g *gpg.GPG, io cout.IO) error {
 	slog.Debug("checking for YubiKey")
 
 	err := g.CheckCardPresent()
@@ -99,24 +100,33 @@ func checkYubikey(g *gpg.GPG, io cout.IO) error {
 		}
 	}
 
-	if err := g.InitYubikey(); err != nil {
-		return fmt.Errorf("failed to initialize YubiKey: %w", err)
+	userName := config.GetUserName()
+	userEmail := config.GetUserEmail()
+	fingerprint := config.GetUserFingerprint()
+
+	if userName == "" || userEmail == "" || fingerprint == "" {
+		return fmt.Errorf("user identity or fingerprint not configured")
 	}
 
-	if g.Yubikey.IsOccupied() {
-		io.Warning("WARNING: YubiKey slots are already occupied with existing keys.")
-		io.Infoln("This may overwrite existing keys on the YubiKey.")
-		proceed, confirmErr := io.Confirm("Do you want to proceed?")
-		if confirmErr != nil {
-			return fmt.Errorf("failed to get user confirmation: %w", confirmErr)
-		}
+	err = g.InitYubikey(userName, userEmail, fingerprint)
+	if err != nil {
+		if strings.Contains(err.Error(), "yubikey slots are occupied") {
+			io.Warning("WARNING: YubiKey slots are already occupied with existing keys.")
+			io.Infoln("This may overwrite existing keys on the YubiKey.")
+			proceed, confirmErr := io.Confirm("Do you want to proceed?")
+			if confirmErr != nil {
+				return fmt.Errorf("failed to get user confirmation: %w", confirmErr)
+			}
 
-		if !proceed {
-			return fmt.Errorf("user chose not to proceed with occupied YubiKey")
+			if !proceed {
+				return fmt.Errorf("user chose not to proceed with occupied YubiKey")
+			}
+			io.Successfln("YubiKey detected and ready for configuration (Serial: %s).", g.Yubikey.SerialNumber)
+		} else {
+			return fmt.Errorf("failed to initialize YubiKey: %w", err)
 		}
-		io.Successfln("YubiKey detected and ready for configuration (Serial: %s).", g.Yubikey.SerialNumber)
 	} else {
-		io.Successfln("YubiKey detected with available slots (Serial: %s).", g.Yubikey.SerialNumber)
+		io.Successfln("YubiKey provisioned successfully (Serial: %s).", g.Yubikey.SerialNumber)
 	}
 
 	return nil

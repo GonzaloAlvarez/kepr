@@ -263,7 +263,7 @@ func parseFingerprintFromGPGOutput(output string) (string, error) {
 	return "", fmt.Errorf("fingerprint not found in gpg output")
 }
 
-func (g *GPG) ProcessMasterKey(fingerprint string) error {
+func (g *GPG) BackupMasterKey(fingerprint string) error {
 	slog.Debug("exporting master key for backup", "fingerprint", fingerprint)
 
 	stdout, stderr, err := g.execute("", "--armor", "--export-secret-key", fingerprint)
@@ -292,14 +292,6 @@ func (g *GPG) ProcessMasterKey(fingerprint string) error {
 	}
 
 	slog.Debug("user confirmed backup, deleting master key from keyring")
-
-	_, stderr, err = g.execute("", "--batch", "--yes", "--delete-secret-keys", fingerprint)
-	if err != nil {
-		return fmt.Errorf("failed to delete secret keys: %w, stderr: %s", err, stderr)
-	}
-
-	slog.Debug("master key deleted from local keyring")
-	g.io.Successln("Master key has been removed from this machine.")
 
 	return nil
 }
