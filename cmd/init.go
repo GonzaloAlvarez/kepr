@@ -44,7 +44,6 @@ func NewInitCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			app.UI.Infofln("Initializing kepr for repo: %s", repo)
 			return nil
 		},
 	}

@@ -238,7 +238,7 @@ func (g *GPG) encryptionKeyToYubikey(fingerprint string) error {
 
 	stdin := "key 1\nkeytocard\n2\nsave\n"
 
-	_, stderr, err := g.executeWithPinentry(stdin, "--command-fd", "3", "--edit-key", fingerprint)
+	_, stderr, err := g.executeWithPinentry(stdin, "--command-fd", "3", "--batch", "--edit-key", fingerprint)
 	if err != nil {
 		slog.Debug("failed to move key to card", "error", err, "stderr", stderr)
 		return fmt.Errorf("failed to move encryption key to yubikey: %w", err)

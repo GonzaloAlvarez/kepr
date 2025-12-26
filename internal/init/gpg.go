@@ -24,6 +24,7 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/gpg"
+	"github.com/gonzaloalvarez/kepr/pkg/pass"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
@@ -66,6 +67,10 @@ func SetupGPG(executor shell.Executor, io cout.IO) error {
 		}
 
 		if err := initYubikey(g, io); err != nil {
+			return err
+		}
+
+		if err := initPasswordStore(configDir, g.HomeDir, fingerprint, executor, io); err != nil {
 			return err
 		}
 
@@ -129,5 +134,18 @@ func initYubikey(g *gpg.GPG, io cout.IO) error {
 		io.Successfln("YubiKey provisioned successfully (Serial: %s).", g.Yubikey.SerialNumber)
 	}
 
+	return nil
+}
+
+func initPasswordStore(configDir, gpgHome, fingerprint string, executor shell.Executor, io cout.IO) error {
+	slog.Debug("initializing password store")
+
+	p := pass.New(configDir, gpgHome, executor)
+
+	if err := p.Init(fingerprint); err != nil {
+		return fmt.Errorf("failed to initialize password store: %w", err)
+	}
+
+	io.Successfln("Initialized local secret store at %s", p.SecretsPath)
 	return nil
 }
