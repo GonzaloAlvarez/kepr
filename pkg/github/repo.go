@@ -32,6 +32,14 @@ func ExtractRepoName(fullPath string) string {
 	return fullPath
 }
 
+func ExtractRepoOwner(fullPath string) string {
+	parts := strings.Split(fullPath, "/")
+	if len(parts) >= 1 {
+		return parts[0]
+	}
+	return ""
+}
+
 func (c *GitHubClient) CheckRepoExists(name string) (bool, error) {
 	slog.Debug("checking if repository exists", "name", name)
 

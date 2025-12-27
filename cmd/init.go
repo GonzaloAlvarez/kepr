@@ -18,9 +18,11 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 
 	initialize "github.com/gonzaloalvarez/kepr/internal/init"
 	"github.com/gonzaloalvarez/kepr/pkg/config"
+	"github.com/gonzaloalvarez/kepr/pkg/git"
 	"github.com/gonzaloalvarez/kepr/pkg/github"
 	"github.com/spf13/cobra"
 )
@@ -75,6 +77,27 @@ func NewInitCmd(app *App) *cobra.Command {
 			if err := initialize.SetupPasswordStore(configDir, gpgHome, fingerprint, app.Shell, app.UI); err != nil {
 				return err
 			}
+
+			secretsPath := filepath.Join(configDir, "secrets")
+			repoOwner := github.ExtractRepoOwner(repo)
+			remoteURL := fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", token, repoOwner, repoName)
+
+			gitClient, err := git.New(app.Shell)
+			if err != nil {
+				return fmt.Errorf("failed to initialize git client: %w", err)
+			}
+
+			if err := gitClient.ConfigureRemote(secretsPath, "origin", remoteURL); err != nil {
+				return fmt.Errorf("failed to configure git remote: %w", err)
+			}
+
+			app.UI.Successfln("Configured git remote for repository")
+
+			if err := gitClient.Push(secretsPath, "origin", "master"); err != nil {
+				return fmt.Errorf("failed to push to remote: %w", err)
+			}
+
+			app.UI.Successfln("Successfully pushed local secrets to remote repository")
 
 			return nil
 		},
