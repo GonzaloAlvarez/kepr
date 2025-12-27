@@ -101,6 +101,10 @@ func SaveToken(token string) error {
 	return writeConfig()
 }
 
+func GetToken() string {
+	return viper.GetString("github_token")
+}
+
 func SaveUserIdentity(name, email string) error {
 	viper.Set("user_name", name)
 	viper.Set("user_email", email)

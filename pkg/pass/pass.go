@@ -99,3 +99,34 @@ func (p *Pass) writeGitignore() error {
 
 	return nil
 }
+
+func (p *Pass) Add(key string) error {
+	slog.Debug("adding secret to password store", "key", key)
+
+	gopassPath, err := p.executor.LookPath("gopass")
+	if err != nil {
+		return fmt.Errorf("gopass binary not found: %w", err)
+	}
+
+	userName := config.GetUserName()
+	userEmail := config.GetUserEmail()
+
+	cmd := p.executor.Command(gopassPath, "insert", key)
+	cmd.SetEnv(append(os.Environ(),
+		fmt.Sprintf("GNUPGHOME=%s", p.GpgHome),
+		fmt.Sprintf("PASSWORD_STORE_DIR=%s", p.SecretsPath),
+		fmt.Sprintf("GIT_AUTHOR_NAME=%s", userName),
+		fmt.Sprintf("GIT_AUTHOR_EMAIL=%s", userEmail),
+	))
+
+	cmd.SetStdin(os.Stdin)
+	cmd.SetStdout(os.Stdout)
+	cmd.SetStderr(os.Stderr)
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("gopass insert failed: %w", err)
+	}
+
+	slog.Debug("secret added successfully")
+	return nil
+}

@@ -18,27 +18,57 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 
+	"github.com/gonzaloalvarez/kepr/internal/add"
+	"github.com/gonzaloalvarez/kepr/pkg/config"
+	"github.com/gonzaloalvarez/kepr/pkg/git"
 	"github.com/spf13/cobra"
 )
 
 func NewAddCmd(app *App) *cobra.Command {
 	return &cobra.Command{
-		Use:   "add [key] [value]",
-		Short: "Add a secret to the store",
-		Args:  cobra.RangeArgs(1, 2),
+		Use:     "add [key]",
+		Aliases: []string{"insert"},
+		Short:   "Add a secret to the store",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key := args[0]
-			var value string
 
-			if len(args) == 2 {
-				value = args[1]
-			} else {
-				return fmt.Errorf("interactive prompt not implemented yet, please provide value argument")
+			token := config.GetToken()
+			if token == "" {
+				return fmt.Errorf("not authenticated: run 'kepr init' first")
+			}
+			app.GitHub.SetToken(token)
+
+			if err := add.IsInitialized(app.GitHub, app.Shell, app.UI); err != nil {
+				return err
 			}
 
-			app.UI.Infofln("Adding secret: %s", key)
-			_ = value
+			if err := add.AddSecret(key, app.Shell); err != nil {
+				return err
+			}
+
+			app.UI.Successfln("Secret added: %s", key)
+
+			configDir, err := config.Dir()
+			if err != nil {
+				return fmt.Errorf("failed to get config directory: %w", err)
+			}
+
+			secretsPath := filepath.Join(configDir, "secrets")
+
+			gitClient, err := git.New(app.Shell)
+			if err != nil {
+				return fmt.Errorf("failed to initialize git client: %w", err)
+			}
+
+			if err := gitClient.Push(secretsPath, "origin", "master"); err != nil {
+				return fmt.Errorf("failed to push to remote: %w", err)
+			}
+
+			app.UI.Successfln("Pushed to remote repository")
+
 			return nil
 		},
 	}

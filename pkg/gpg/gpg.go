@@ -295,3 +295,55 @@ func (g *GPG) BackupMasterKey(fingerprint string) error {
 
 	return nil
 }
+
+type GPGKey struct {
+	Fingerprint string
+	UserID      string
+	Email       string
+	Name        string
+}
+
+func (g *GPG) ListPublicKeys() ([]GPGKey, error) {
+	slog.Debug("listing public keys")
+
+	stdout, _, err := g.execute("", "--list-keys", "--with-colons")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list keys: %w", err)
+	}
+
+	var keys []GPGKey
+	var currentFingerprint string
+
+	lines := strings.Split(stdout, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "fpr:") {
+			fields := strings.Split(line, ":")
+			if len(fields) >= 10 {
+				currentFingerprint = fields[9]
+			}
+		} else if strings.HasPrefix(line, "uid:") && currentFingerprint != "" {
+			fields := strings.Split(line, ":")
+			if len(fields) >= 10 {
+				uid := fields[9]
+				key := GPGKey{
+					Fingerprint: currentFingerprint,
+					UserID:      uid,
+				}
+
+				if strings.Contains(uid, "<") && strings.Contains(uid, ">") {
+					emailStart := strings.Index(uid, "<")
+					emailEnd := strings.Index(uid, ">")
+					if emailStart < emailEnd {
+						key.Email = uid[emailStart+1 : emailEnd]
+						key.Name = strings.TrimSpace(uid[:emailStart])
+					}
+				}
+
+				keys = append(keys, key)
+			}
+		}
+	}
+
+	slog.Debug("found keys", "count", len(keys))
+	return keys, nil
+}
