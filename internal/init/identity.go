@@ -23,13 +23,12 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/github"
-	"github.com/spf13/viper"
 )
 
 const githubClientID = "Ov23liaarzPv4HBvyPtW"
 
 func AuthGithub(client github.Client, io cout.IO) (string, error) {
-	token := viper.GetString("github_token")
+	token := config.GetToken()
 	if token == "" {
 		slog.Debug("no token found locally, starting authentication")
 		var err error
@@ -44,7 +43,7 @@ func AuthGithub(client github.Client, io cout.IO) (string, error) {
 
 		io.Successln("Authentication successful.")
 	} else {
-		slog.Debug("token foundlocally , skipping authentication")
+		slog.Debug("token found locally, skipping authentication")
 		io.Infoln("Already authenticated.")
 	}
 
@@ -52,8 +51,8 @@ func AuthGithub(client github.Client, io cout.IO) (string, error) {
 }
 
 func UserInfo(client github.Client, io cout.IO) error {
-	userName := viper.GetString("user_name")
-	userEmail := viper.GetString("user_email")
+	userName := config.GetUserName()
+	userEmail := config.GetUserEmail()
 	if userName == "" || userEmail == "" {
 		slog.Debug("user identity not found locally, fetching from GitHub")
 
