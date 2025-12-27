@@ -41,7 +41,7 @@ func NewGitHubClient() *GitHubClient {
 
 func (c *GitHubClient) Authenticate(clientID string, io cout.IO) (string, error) {
 	httpClient := &http.Client{}
-	scopes := []string{"repo", "read:org", "user:email"}
+	scopes := []string{"repo", "read:org", "user:email", "delete_repo"}
 
 	slog.Debug("requesting device code", "scopes", scopes)
 	code, err := device.RequestCode(httpClient, "https://github.com/login/device/code", clientID, scopes)

@@ -55,7 +55,7 @@ func SetupGPG(executor shell.Executor, io cout.IO) error {
 			return fmt.Errorf("failed to generate keys: %w", err)
 		}
 
-		cout.Successfln("Generated GPG Fingerprint: %s", fingerprint)
+		io.Successfln("Generated Identity: %s", fingerprint)
 
 		if err := config.SaveFingerprint(fingerprint); err != nil {
 			return fmt.Errorf("failed to save fingerprint: %w", err)
