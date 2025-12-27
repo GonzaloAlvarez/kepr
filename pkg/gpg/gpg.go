@@ -38,7 +38,6 @@ type GPG struct {
 	SCDaemonConfigPath string
 	executor           shell.Executor
 	io                 cout.IO
-	Yubikey            *Yubikey
 }
 
 func findPinentry(executor shell.Executor) (string, error) {

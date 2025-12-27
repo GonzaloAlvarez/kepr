@@ -33,12 +33,19 @@ type Yubikey struct {
 	Login              string
 	SignatureOccupied  bool
 	EncryptionOccupied bool
+	gpg                *GPG
 }
 
-func (g *GPG) CheckCardPresent() error {
+func NewYubikey(g *GPG) *Yubikey {
+	return &Yubikey{
+		gpg: g,
+	}
+}
+
+func (y *Yubikey) CheckCardPresent() error {
 	slog.Debug("checking if card is present")
 
-	stdout, stderr, err := g.execute("", "--card-status")
+	stdout, stderr, err := y.gpg.execute("", "--card-status")
 	if err != nil {
 		slog.Debug("card status command failed", "error", err, "stderr", stderr)
 		return fmt.Errorf("no card found")
@@ -54,10 +61,10 @@ func (g *GPG) CheckCardPresent() error {
 	return nil
 }
 
-func (g *GPG) checkCardStatus() error {
+func (y *Yubikey) checkCardStatus() error {
 	slog.Debug("checking card status")
 
-	stdout, stderr, err := g.execute("", "--card-status")
+	stdout, stderr, err := y.gpg.execute("", "--card-status")
 	if err != nil {
 		slog.Debug("card status command failed", "error", err, "stderr", stderr)
 		return fmt.Errorf("no card found")
@@ -71,35 +78,33 @@ func (g *GPG) checkCardStatus() error {
 
 	slog.Debug("card status output", "stdout", stdout, "stderr", stderr)
 
-	yubikey, err := parseCardStatus(stdout)
-	if err != nil {
+	if err := y.parseCardStatus(stdout); err != nil {
 		return fmt.Errorf("failed to parse card status: %w", err)
 	}
 
-	g.Yubikey = yubikey
-	slog.Debug("yubikey status retrieved", "serial", yubikey.SerialNumber,
-		"sig_occupied", yubikey.SignatureOccupied,
-		"enc_occupied", yubikey.EncryptionOccupied)
+	slog.Debug("yubikey status retrieved", "serial", y.SerialNumber,
+		"sig_occupied", y.SignatureOccupied,
+		"enc_occupied", y.EncryptionOccupied)
 
 	return nil
 }
 
-func (g *GPG) InitYubikey(name, email, fingerprint string) error {
+func (y *Yubikey) Init(name, email, fingerprint string) error {
 	slog.Debug("initializing yubikey", "fingerprint", fingerprint)
 
-	if err := g.checkCardStatus(); err != nil {
+	if err := y.checkCardStatus(); err != nil {
 		return err
 	}
 
-	if g.Yubikey.IsOccupied() {
+	if y.IsOccupied() {
 		return fmt.Errorf("yubikey slots are occupied")
 	}
 
-	if err := g.configureCard(name, email); err != nil {
+	if err := y.configureCard(name, email); err != nil {
 		return fmt.Errorf("failed to configure card: %w", err)
 	}
 
-	if err := g.encryptionKeyToYubikey(fingerprint); err != nil {
+	if err := y.encryptionKeyToYubikey(fingerprint); err != nil {
 		return fmt.Errorf("failed to move encryption key to yubikey: %w", err)
 	}
 
@@ -107,10 +112,8 @@ func (g *GPG) InitYubikey(name, email, fingerprint string) error {
 	return nil
 }
 
-func parseCardStatus(output string) (*Yubikey, error) {
+func (y *Yubikey) parseCardStatus(output string) error {
 	lines := strings.Split(output, "\n")
-	yubikey := &Yubikey{}
-
 	fingerprintRegex := regexp.MustCompile(`[0-9A-Fa-f\s]{40,}`)
 
 	for _, line := range lines {
@@ -119,58 +122,58 @@ func parseCardStatus(output string) (*Yubikey, error) {
 		if strings.HasPrefix(line, "Serial number") {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
-				yubikey.SerialNumber = strings.TrimSpace(parts[1])
+				y.SerialNumber = strings.TrimSpace(parts[1])
 			}
 		} else if strings.HasPrefix(line, "Manufacturer") {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
-				yubikey.Manufacturer = strings.TrimSpace(parts[1])
+				y.Manufacturer = strings.TrimSpace(parts[1])
 			}
 		} else if strings.HasPrefix(line, "Name of cardholder") {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
-				yubikey.CardholderName = strings.TrimSpace(parts[1])
-				slog.Debug("found cardholder name", "name", yubikey.CardholderName)
+				y.CardholderName = strings.TrimSpace(parts[1])
+				slog.Debug("found cardholder name", "name", y.CardholderName)
 			}
 		} else if strings.HasPrefix(line, "Login name") {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
-				yubikey.Login = strings.TrimSpace(parts[1])
-				slog.Debug("found login name", "login", yubikey.Login)
+				y.Login = strings.TrimSpace(parts[1])
+				slog.Debug("found login name", "login", y.Login)
 			}
 		} else if strings.Contains(line, "Signature key") {
 			slog.Debug("found signature key line", "line", line)
 			if strings.Contains(line, "[none]") {
-				yubikey.SignatureOccupied = false
-				yubikey.SignatureKey = ""
+				y.SignatureOccupied = false
+				y.SignatureKey = ""
 			} else if fingerprintRegex.MatchString(line) {
-				yubikey.SignatureOccupied = true
-				yubikey.SignatureKey = extractFingerprint(line)
+				y.SignatureOccupied = true
+				y.SignatureKey = extractFingerprint(line)
 			}
 		} else if strings.Contains(line, "Encryption key") {
 			slog.Debug("found encryption key line", "line", line)
 			if strings.Contains(line, "[none]") {
-				yubikey.EncryptionOccupied = false
-				yubikey.EncryptionKey = ""
+				y.EncryptionOccupied = false
+				y.EncryptionKey = ""
 			} else if fingerprintRegex.MatchString(line) {
-				yubikey.EncryptionOccupied = true
-				yubikey.EncryptionKey = extractFingerprint(line)
+				y.EncryptionOccupied = true
+				y.EncryptionKey = extractFingerprint(line)
 			}
 		} else if strings.Contains(line, "Authentication key") {
 			slog.Debug("found authentication key line", "line", line)
 			if !strings.Contains(line, "[none]") && fingerprintRegex.MatchString(line) {
-				yubikey.AuthenticationKey = extractFingerprint(line)
+				y.AuthenticationKey = extractFingerprint(line)
 			}
 		}
 	}
 
 	slog.Debug("parsed yubikey info",
-		"serial", yubikey.SerialNumber,
-		"manufacturer", yubikey.Manufacturer,
-		"sig_occupied", yubikey.SignatureOccupied,
-		"enc_occupied", yubikey.EncryptionOccupied)
+		"serial", y.SerialNumber,
+		"manufacturer", y.Manufacturer,
+		"sig_occupied", y.SignatureOccupied,
+		"enc_occupied", y.EncryptionOccupied)
 
-	return yubikey, nil
+	return nil
 }
 
 func extractFingerprint(line string) string {
@@ -183,14 +186,14 @@ func (y *Yubikey) IsOccupied() bool {
 	return y.SignatureOccupied || y.EncryptionOccupied
 }
 
-func (g *GPG) cardEdit(attribute string, values []string) error {
+func (y *Yubikey) cardEdit(attribute string, values []string) error {
 	valuesStr := strings.Join(values, "\n")
 	stdin := fmt.Sprintf("admin\n%s\n%s\nquit\n", attribute, valuesStr)
 
 	slog.Debug("editing card", "attribute", attribute, "values", values)
 	slog.Debug("stdin", "stdin", stdin)
 
-	_, stderr, err := g.executeWithPinentry(stdin, "--quiet", "--card-edit", "--expert", "--batch", "--display-charset", "utf-8", "--command-fd", "3")
+	_, stderr, err := y.gpg.executeWithPinentry(stdin, "--quiet", "--card-edit", "--expert", "--batch", "--display-charset", "utf-8", "--command-fd", "3")
 	if err != nil {
 		slog.Debug("card edit failed", "error", err, "stderr", stderr)
 		return fmt.Errorf("failed to edit card attribute %s: %w", attribute, err)
@@ -211,21 +214,21 @@ func splitName(name string) (string, string) {
 	return firstName, lastName
 }
 
-func (g *GPG) configureCard(name, email string) error {
+func (y *Yubikey) configureCard(name, email string) error {
 	slog.Debug("configuring card", "name", name, "email", email)
-	slog.Debug("cardholder name", "cardholder", g.Yubikey.CardholderName)
-	slog.Debug("login", "login", g.Yubikey.Login)
-	if name != "" && (g.Yubikey.CardholderName == "" || g.Yubikey.CardholderName == "[not set]") {
+	slog.Debug("cardholder name", "cardholder", y.CardholderName)
+	slog.Debug("login", "login", y.Login)
+	if name != "" && (y.CardholderName == "" || y.CardholderName == "[not set]") {
 		firstName, lastName := splitName(name)
 		slog.Debug("split name", "firstName", firstName, "lastName", lastName)
 
-		if err := g.cardEdit("name", []string{lastName, firstName}); err != nil {
+		if err := y.cardEdit("name", []string{lastName, firstName}); err != nil {
 			return err
 		}
 	}
 
-	if email != "" && (g.Yubikey.Login == "" || g.Yubikey.Login == "[not set]") {
-		if err := g.cardEdit("login", []string{email}); err != nil {
+	if email != "" && (y.Login == "" || y.Login == "[not set]") {
+		if err := y.cardEdit("login", []string{email}); err != nil {
 			return err
 		}
 	}
@@ -233,12 +236,12 @@ func (g *GPG) configureCard(name, email string) error {
 	return nil
 }
 
-func (g *GPG) encryptionKeyToYubikey(fingerprint string) error {
+func (y *Yubikey) encryptionKeyToYubikey(fingerprint string) error {
 	slog.Debug("moving encryption key to yubikey", "fingerprint", fingerprint)
 
 	stdin := "key 1\nkeytocard\n2\nsave\n"
 
-	_, stderr, err := g.executeWithPinentry(stdin, "--command-fd", "3", "--batch", "--edit-key", fingerprint)
+	_, stderr, err := y.gpg.executeWithPinentry(stdin, "--command-fd", "3", "--batch", "--edit-key", fingerprint)
 	if err != nil {
 		slog.Debug("failed to move key to card", "error", err, "stderr", stderr)
 		return fmt.Errorf("failed to move encryption key to yubikey: %w", err)

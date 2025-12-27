@@ -80,7 +80,9 @@ func SetupGPG(executor shell.Executor, io cout.IO) error {
 func initYubikey(g *gpg.GPG, io cout.IO) error {
 	slog.Debug("checking for YubiKey")
 
-	err := g.CheckCardPresent()
+	y := gpg.NewYubikey(g)
+
+	err := y.CheckCardPresent()
 	if err != nil {
 		slog.Debug("no YubiKey detected, prompting user")
 		retry, confirmErr := io.Confirm("No YubiKey detected. Please insert your YubiKey and retry?")
@@ -93,7 +95,7 @@ func initYubikey(g *gpg.GPG, io cout.IO) error {
 			return fmt.Errorf("YubiKey not detected and user chose not to retry")
 		}
 
-		err = g.CheckCardPresent()
+		err = y.CheckCardPresent()
 		if err != nil {
 			io.Warning("YubiKey still not detected. Exiting.")
 			return fmt.Errorf("YubiKey not detected after retry")
@@ -108,7 +110,7 @@ func initYubikey(g *gpg.GPG, io cout.IO) error {
 		return fmt.Errorf("user identity or fingerprint not configured")
 	}
 
-	err = g.InitYubikey(userName, userEmail, fingerprint)
+	err = y.Init(userName, userEmail, fingerprint)
 	if err != nil {
 		if strings.Contains(err.Error(), "yubikey slots are occupied") {
 			io.Warning("WARNING: YubiKey slots are already occupied with existing keys.")
@@ -121,12 +123,12 @@ func initYubikey(g *gpg.GPG, io cout.IO) error {
 			if !proceed {
 				return fmt.Errorf("user chose not to proceed with occupied YubiKey")
 			}
-			io.Successfln("YubiKey detected and ready for configuration (Serial: %s).", g.Yubikey.SerialNumber)
+			io.Successfln("YubiKey detected and ready for configuration (Serial: %s).", y.SerialNumber)
 		} else {
 			return fmt.Errorf("failed to initialize YubiKey: %w", err)
 		}
 	} else {
-		io.Successfln("YubiKey provisioned successfully (Serial: %s).", g.Yubikey.SerialNumber)
+		io.Successfln("YubiKey provisioned successfully (Serial: %s).", y.SerialNumber)
 	}
 
 	return nil
