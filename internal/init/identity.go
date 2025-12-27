@@ -26,7 +26,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const githubClientID = "Iv23li6c8kmcEmGBK3yC"
+const githubClientID = "Ov23liaarzPv4HBvyPtW"
 
 func AuthGithub(client github.Client, io cout.IO) (string, error) {
 	token := viper.GetString("github_token")

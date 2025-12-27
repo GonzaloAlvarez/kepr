@@ -17,8 +17,11 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
+	"fmt"
+
 	initialize "github.com/gonzaloalvarez/kepr/internal/init"
 	"github.com/gonzaloalvarez/kepr/pkg/config"
+	"github.com/gonzaloalvarez/kepr/pkg/github"
 	"github.com/spf13/cobra"
 )
 
@@ -36,6 +39,22 @@ func NewInitCmd(app *App) *cobra.Command {
 			}
 
 			app.GitHub.SetToken(token)
+
+			repoName := github.ExtractRepoName(repo)
+			exists, err := app.GitHub.CheckRepoExists(repoName)
+			if err != nil {
+				return fmt.Errorf("failed to check repository: %w", err)
+			}
+
+			if exists {
+				return fmt.Errorf("repository '%s' already exists", repoName)
+			}
+
+			if err := app.GitHub.CreateRepo(repoName); err != nil {
+				return fmt.Errorf("failed to create remote repository: %w", err)
+			}
+
+			app.UI.Successfln("Created private remote repository: github.com/%s", repo)
 
 			if err := initialize.UserInfo(app.GitHub, app.UI); err != nil {
 				return err
@@ -57,7 +76,6 @@ func NewInitCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			app.UI.Infofln("Initializing kepr for repo: %s", repo)
 			return nil
 		},
 	}

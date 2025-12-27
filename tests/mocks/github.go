@@ -8,20 +8,18 @@ import (
 )
 
 type MockGitHub struct {
-	Token         string
-	UserName      string
-	UserEmail     string
-	Repos         map[string]bool
-	UploadedFiles map[string]map[string][]byte
-	AuthCalled    bool
+	Token      string
+	UserName   string
+	UserEmail  string
+	Repos      map[string]bool
+	AuthCalled bool
 }
 
 func NewMockGitHub(userName, userEmail string) *MockGitHub {
 	return &MockGitHub{
-		UserName:      userName,
-		UserEmail:     userEmail,
-		Repos:         make(map[string]bool),
-		UploadedFiles: make(map[string]map[string][]byte),
+		UserName:  userName,
+		UserEmail: userEmail,
+		Repos:     make(map[string]bool),
 	}
 }
 
@@ -44,29 +42,18 @@ func (m *MockGitHub) GetUserIdentity() (string, string, error) {
 	return m.UserName, m.UserEmail, nil
 }
 
-func (m *MockGitHub) EnsureRepo(name string, private bool) error {
-	m.Repos[name] = private
-	return nil
+func (m *MockGitHub) CheckRepoExists(name string) (bool, error) {
+	_, exists := m.Repos[name]
+	return exists, nil
 }
 
-func (m *MockGitHub) UploadFile(repo string, filePath string, content []byte) error {
-	if m.UploadedFiles[repo] == nil {
-		m.UploadedFiles[repo] = make(map[string][]byte)
-	}
-	m.UploadedFiles[repo][filePath] = content
+func (m *MockGitHub) CreateRepo(name string) error {
+	m.Repos[name] = true
 	return nil
 }
 
 func (m *MockGitHub) WasRepoCalled(name string) bool {
 	_, exists := m.Repos[name]
-	return exists
-}
-
-func (m *MockGitHub) WasFileUploaded(repo string, filePath string) bool {
-	if m.UploadedFiles[repo] == nil {
-		return false
-	}
-	_, exists := m.UploadedFiles[repo][filePath]
 	return exists
 }
 

@@ -22,6 +22,6 @@ type Client interface {
 	Authenticate(clientID string, io cout.IO) (string, error)
 	SetToken(token string)
 	GetUserIdentity() (name string, email string, err error)
-	EnsureRepo(name string, private bool) error
-	UploadFile(repo string, filePath string, content []byte) error
+	CheckRepoExists(name string) (bool, error)
+	CreateRepo(name string) error
 }
