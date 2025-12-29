@@ -79,7 +79,7 @@ func (g *GPG) BackupMasterKey(fingerprint string) error {
 		return fmt.Errorf("failed to export secret key: %w, stderr: %s", err, stderr)
 	}
 
-	secretKey := stdout
+	secretKey := strings.Replace(stdout, "\n\n", "\n", -1)
 	if secretKey == "" {
 		return fmt.Errorf("exported secret key is empty")
 	}
