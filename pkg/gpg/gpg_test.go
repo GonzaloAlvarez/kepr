@@ -24,99 +24,6 @@ import (
 	"testing"
 )
 
-func TestParseFingerprintFromGPGOutput_Success(t *testing.T) {
-	output := `tru::1:1733100896:0:3:1:5
-pub:-:255:22:4B4040BF3305A8FF:1733100896:::-:::escaESCA:::::::23::0:
-fpr:::::::::4AE0C21F0B01B9EC08E48D3C4B4040BF3305A8FF:
-uid:-::::1733100896::C8F9E7F8D8A9E8F8D8A9E8F8::Test User <test@example.com>::::::::::0:
-sub:-:255:18:A399C16AA20E1EC7:1733100896::::::e:::::::23::0:
-fpr:::::::::9E8F9E8F9E8F9E8FA399C16AA20E1EC7:`
-
-	fingerprint, err := parseFingerprintFromGPGOutput(output)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	expected := "4AE0C21F0B01B9EC08E48D3C4B4040BF3305A8FF"
-	if fingerprint != expected {
-		t.Errorf("expected fingerprint %q, got %q", expected, fingerprint)
-	}
-}
-
-func TestParseFingerprintFromGPGOutput_MultipleKeys(t *testing.T) {
-	output := `pub:-:255:22:AAAAAAAAAAAAAAAA:1733100896:::-:::escaESCA:::::::23::0:
-fpr:::::::::AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:
-uid:-::::1733100896::C8F9E7F8D8A9E8F8D8A9E8F8::First Key <first@example.com>::::::::::0:
-pub:-:255:22:BBBBBBBBBBBBBBBB:1733100897:::-:::escaESCA:::::::23::0:
-fpr:::::::::BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:
-uid:-::::1733100897::C8F9E7F8D8A9E8F8D8A9E8F8::Second Key <second@example.com>::::::::::0:`
-
-	fingerprint, err := parseFingerprintFromGPGOutput(output)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	expected := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	if fingerprint != expected {
-		t.Errorf("expected first fingerprint %q, got %q", expected, fingerprint)
-	}
-}
-
-func TestParseFingerprintFromGPGOutput_NoFingerprint(t *testing.T) {
-	output := `pub:-:255:22:4B4040BF3305A8FF:1733100896:::-:::escaESCA:::::::23::0:
-uid:-::::1733100896::C8F9E7F8D8A9E8F8D8A9E8F8::Test User <test@example.com>::::::::::0:`
-
-	_, err := parseFingerprintFromGPGOutput(output)
-	if err == nil {
-		t.Fatal("expected error for missing fingerprint, got nil")
-	}
-
-	expectedError := "fingerprint not found in gpg output"
-	if err.Error() != expectedError {
-		t.Errorf("expected error %q, got %q", expectedError, err.Error())
-	}
-}
-
-func TestParseFingerprintFromGPGOutput_EmptyOutput(t *testing.T) {
-	output := ""
-
-	_, err := parseFingerprintFromGPGOutput(output)
-	if err == nil {
-		t.Fatal("expected error for empty output, got nil")
-	}
-}
-
-func TestParseFingerprintFromGPGOutput_MalformedFprLine(t *testing.T) {
-	output := `pub:-:255:22:4B4040BF3305A8FF:1733100896:::-:::escaESCA:::::::23::0:
-fpr:too:few:fields
-uid:-::::1733100896::C8F9E7F8D8A9E8F8D8A9E8F8::Test User <test@example.com>::::::::::0:`
-
-	_, err := parseFingerprintFromGPGOutput(output)
-	if err == nil {
-		t.Fatal("expected error for malformed fpr line, got nil")
-	}
-}
-
-func TestParseFingerprintFromGPGOutput_WithWhitespace(t *testing.T) {
-	output := `
-	
-pub:-:255:22:4B4040BF3305A8FF:1733100896:::-:::escaESCA:::::::23::0:
-fpr:::::::::4AE0C21F0B01B9EC08E48D3C4B4040BF3305A8FF:
-
-uid:-::::1733100896::C8F9E7F8D8A9E8F8D8A9E8F8::Test User <test@example.com>::::::::::0:
-	`
-
-	fingerprint, err := parseFingerprintFromGPGOutput(output)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	expected := "4AE0C21F0B01B9EC08E48D3C4B4040BF3305A8FF"
-	if fingerprint != expected {
-		t.Errorf("expected fingerprint %q, got %q", expected, fingerprint)
-	}
-}
-
 func TestGenerateGPGConf(t *testing.T) {
 	conf := generateGPGConf()
 
@@ -184,11 +91,12 @@ func TestWriteConfigs(t *testing.T) {
 	tempDir := t.TempDir()
 
 	gpg := &GPG{
-		HomeDir:         tempDir,
-		ConfigPath:      filepath.Join(tempDir, "gpg.conf"),
-		AgentConfigPath: filepath.Join(tempDir, "gpg-agent.conf"),
-		PinentryPath:    "/usr/bin/pinentry-test",
-		io:              NewMockIO(),
+		HomeDir:            tempDir,
+		ConfigPath:         filepath.Join(tempDir, "gpg.conf"),
+		AgentConfigPath:    filepath.Join(tempDir, "gpg-agent.conf"),
+		SCDaemonConfigPath: filepath.Join(tempDir, "scdaemon.conf"),
+		PinentryPath:       "/usr/bin/pinentry-test",
+		io:                 NewMockIO(),
 	}
 
 	err := gpg.writeConfigs()
@@ -224,11 +132,12 @@ func TestWriteConfigs_FilePermissions(t *testing.T) {
 	tempDir := t.TempDir()
 
 	gpg := &GPG{
-		HomeDir:         tempDir,
-		ConfigPath:      filepath.Join(tempDir, "gpg.conf"),
-		AgentConfigPath: filepath.Join(tempDir, "gpg-agent.conf"),
-		PinentryPath:    "/usr/bin/pinentry",
-		io:              NewMockIO(),
+		HomeDir:            tempDir,
+		ConfigPath:         filepath.Join(tempDir, "gpg.conf"),
+		AgentConfigPath:    filepath.Join(tempDir, "gpg-agent.conf"),
+		SCDaemonConfigPath: filepath.Join(tempDir, "scdaemon.conf"),
+		PinentryPath:       "/usr/bin/pinentry",
+		io:                 NewMockIO(),
 	}
 
 	err := gpg.writeConfigs()
@@ -277,7 +186,7 @@ func TestGenerateKeys_Success(t *testing.T) {
 	mockExec := NewMockExecutor()
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
-		"fpr:::::::::ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234:\n", "", nil)
+		"fpr:::::::::ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234:\nuid:-::::::::Test User <test@example.com>:\n", "", nil)
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--pinentry-mode", "loopback", "--passphrase", "", "--quick-add-key", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234", "cv25519", "encr", "0"}, "", "", nil)
 
 	gpg := &GPG{
@@ -341,7 +250,7 @@ func TestGenerateKeys_SubkeyFails(t *testing.T) {
 	mockExec := NewMockExecutor()
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
-		"fpr:::::::::TESTFINGERPRINT123456789012345678:\n", "", nil)
+		"fpr:::::::::TESTFINGERPRINT123456789012345678:\nuid:-::::::::Test User <test@example.com>:\n", "", nil)
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--pinentry-mode", "loopback", "--passphrase", "", "--quick-add-key", "TESTFINGERPRINT123456789012345678", "cv25519", "encr", "0"},
 		"", "gpg: error adding subkey", fmt.Errorf("exit status 2"))
 
@@ -359,127 +268,6 @@ func TestGenerateKeys_SubkeyFails(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "failed to generate encryption subkey") {
 		t.Errorf("expected error to mention subkey generation, got: %v", err)
-	}
-}
-
-func TestGetFingerprint_Success(t *testing.T) {
-	tempDir := t.TempDir()
-
-	mockExec := NewMockExecutor()
-	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
-		"fpr:::::::::FINGERPRINT1234567890ABCDEF1234567890:\n", "", nil)
-
-	gpg := &GPG{
-		BinaryPath: "/usr/bin/gpg",
-		HomeDir:    tempDir,
-		executor:   mockExec,
-		io:         NewMockIO(),
-	}
-
-	fingerprint, err := gpg.getFingerprint()
-	if err != nil {
-		t.Fatalf("getFingerprint() failed: %v", err)
-	}
-
-	expected := "FINGERPRINT1234567890ABCDEF1234567890"
-	if fingerprint != expected {
-		t.Errorf("expected fingerprint %q, got %q", expected, fingerprint)
-	}
-}
-
-func TestGetFingerprint_ListKeysFails(t *testing.T) {
-	tempDir := t.TempDir()
-
-	mockExec := NewMockExecutor()
-	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
-		"", "gpg: no keys found", fmt.Errorf("exit status 2"))
-
-	gpg := &GPG{
-		BinaryPath: "/usr/bin/gpg",
-		HomeDir:    tempDir,
-		executor:   mockExec,
-		io:         NewMockIO(),
-	}
-
-	_, err := gpg.getFingerprint()
-	if err == nil {
-		t.Fatal("expected getFingerprint() to fail, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "failed to list keys") {
-		t.Errorf("expected error to mention list keys, got: %v", err)
-	}
-}
-
-func TestGetFingerprint_NoFingerprintInOutput(t *testing.T) {
-	tempDir := t.TempDir()
-
-	mockExec := NewMockExecutor()
-	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
-		"pub:u:255:22:1234567890ABCDEF:2025-12-01:::", "", nil)
-
-	gpg := &GPG{
-		BinaryPath: "/usr/bin/gpg",
-		HomeDir:    tempDir,
-		executor:   mockExec,
-		io:         NewMockIO(),
-	}
-
-	_, err := gpg.getFingerprint()
-	if err == nil {
-		t.Fatal("expected getFingerprint() to fail when no fpr line, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "fingerprint not found") {
-		t.Errorf("expected error to mention fingerprint not found, got: %v", err)
-	}
-}
-
-func TestProcessMasterKey_ExportFails(t *testing.T) {
-	tempDir := t.TempDir()
-
-	mockExec := NewMockExecutor()
-	mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export-secret-key", "TESTFINGERPRINT"},
-		"", "gpg: key not found", fmt.Errorf("exit status 2"))
-
-	gpg := &GPG{
-		BinaryPath: "/usr/bin/gpg",
-		HomeDir:    tempDir,
-		executor:   mockExec,
-		io:         NewMockIO(),
-	}
-
-	err := gpg.ProcessMasterKey("TESTFINGERPRINT")
-	if err == nil {
-		t.Fatal("expected ProcessMasterKey() to fail on export, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "failed to export secret key") {
-		t.Errorf("expected error to mention export failure, got: %v", err)
-	}
-}
-
-func TestProcessMasterKey_EmptySecretKey(t *testing.T) {
-	tempDir := t.TempDir()
-
-	mockExec := NewMockExecutor()
-	mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export-secret-key", "TESTFINGERPRINT"},
-		"", "", nil)
-
-	gpg := &GPG{
-		BinaryPath: "/usr/bin/gpg",
-		HomeDir:    tempDir,
-		executor:   mockExec,
-		io:         NewMockIO(),
-	}
-
-	err := gpg.ProcessMasterKey("TESTFINGERPRINT")
-	if err == nil {
-		t.Fatal("expected ProcessMasterKey() to fail with empty key, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "exported secret key is empty") {
-		t.Errorf("expected error to mention empty secret key, got: %v", err)
 	}
 }
 
@@ -514,7 +302,7 @@ func TestGenerateKeys_WithSpecialCharactersInName(t *testing.T) {
 	mockExec := NewMockExecutor()
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
-		"fpr:::::::::SPECIALCHARSFINGERPRINT12345678901234:\n", "", nil)
+		"fpr:::::::::SPECIALCHARSFINGERPRINT12345678901234:\nuid:-::::::::Test User (Comment) <test+tag@example.com>:\n", "", nil)
 	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--pinentry-mode", "loopback", "--passphrase", "", "--quick-add-key", "SPECIALCHARSFINGERPRINT12345678901234", "cv25519", "encr", "0"}, "", "", nil)
 
 	gpg := &GPG{

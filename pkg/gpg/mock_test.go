@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
@@ -124,8 +125,10 @@ type MockCmd struct {
 	stderr       io.Writer
 }
 
-func (c *MockCmd) SetDir(dir string)   {}
-func (c *MockCmd) SetEnv(env []string) {}
+func (c *MockCmd) SetDir(dir string)          {}
+func (c *MockCmd) SetEnv(env []string)        {}
+func (c *MockCmd) GetEnv(key string) string   { return "" }
+func (c *MockCmd) SetExtraFiles(f []*os.File) {}
 func (c *MockCmd) SetStdin(r io.Reader) {
 	if r != nil {
 		buf := new(bytes.Buffer)
@@ -141,6 +144,12 @@ func (c *MockCmd) SetStderr(w io.Writer) {
 }
 func (c *MockCmd) Run() error {
 	return c.executor.executeMock(c)
+}
+func (c *MockCmd) Start() error {
+	return c.executor.executeMock(c)
+}
+func (c *MockCmd) Wait() error {
+	return nil
 }
 func (c *MockCmd) Output() ([]byte, error) {
 	var out bytes.Buffer
