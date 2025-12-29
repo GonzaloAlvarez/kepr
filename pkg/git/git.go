@@ -64,6 +64,23 @@ func (g *Git) ConfigureRemote(repoPath, remoteName, remoteURL string) error {
 	return nil
 }
 
+func (g *Git) Pull(repoPath, remoteName, branch string) error {
+	slog.Debug("pulling from remote", "path", repoPath, "remote", remoteName, "branch", branch)
+
+	cmd := g.executor.Command(g.BinaryPath, "pull", "--squash", remoteName, branch)
+	cmd.SetDir(repoPath)
+
+	var stderrBuf bytes.Buffer
+	cmd.SetStderr(&stderrBuf)
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to pull: %w, stderr: %s", err, stderrBuf.String())
+	}
+
+	slog.Debug("successfully pulled from remote")
+	return nil
+}
+
 func (g *Git) Push(repoPath, remoteName, branch string) error {
 	slog.Debug("pushing to remote", "path", repoPath, "remote", remoteName, "branch", branch)
 
