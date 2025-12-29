@@ -17,6 +17,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
+	"github.com/gonzaloalvarez/kepr/internal/get"
 	"github.com/spf13/cobra"
 )
 
@@ -26,9 +27,7 @@ func NewGetCmd(app *App) *cobra.Command {
 		Short: "Retrieve a secret from the store",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			key := args[0]
-			app.UI.Infofln("Getting secret: %s", key)
-			return nil
+			return get.Execute(args[0], app.GitHub, app.Shell, app.UI)
 		},
 	}
 }

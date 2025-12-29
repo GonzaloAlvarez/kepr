@@ -130,3 +130,29 @@ func (p *Pass) Add(key string) error {
 	slog.Debug("secret added successfully")
 	return nil
 }
+
+func (p *Pass) Get(key string) error {
+	slog.Debug("getting secret from password store", "key", key)
+
+	gopassPath, err := p.executor.LookPath("gopass")
+	if err != nil {
+		return fmt.Errorf("gopass binary not found: %w", err)
+	}
+
+	cmd := p.executor.Command(gopassPath, "show", "--password", key)
+	cmd.SetEnv(append(os.Environ(),
+		fmt.Sprintf("GNUPGHOME=%s", p.GpgHome),
+		fmt.Sprintf("PASSWORD_STORE_DIR=%s", p.SecretsPath),
+	))
+
+	cmd.SetStdin(os.Stdin)
+	cmd.SetStdout(os.Stdout)
+	cmd.SetStderr(os.Stderr)
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("gopass show failed: %w", err)
+	}
+
+	slog.Debug("secret retrieved successfully")
+	return nil
+}
