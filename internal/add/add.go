@@ -21,11 +21,24 @@ import (
 	"path/filepath"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
+	"github.com/gonzaloalvarez/kepr/pkg/cout"
+	"github.com/gonzaloalvarez/kepr/pkg/git"
+	"github.com/gonzaloalvarez/kepr/pkg/github"
 	"github.com/gonzaloalvarez/kepr/pkg/pass"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func AddSecret(key string, executor shell.Executor) error {
+func Execute(key string, githubClient github.Client, executor shell.Executor, io cout.IO) error {
+	token := config.GetToken()
+	if token == "" {
+		return fmt.Errorf("not authenticated: run 'kepr init' first")
+	}
+	githubClient.SetToken(token)
+
+	if err := IsInitialized(githubClient, executor, io); err != nil {
+		return err
+	}
+
 	configDir, err := config.Dir()
 	if err != nil {
 		return fmt.Errorf("failed to get config directory: %w", err)
@@ -34,5 +47,24 @@ func AddSecret(key string, executor shell.Executor) error {
 	gpgHome := filepath.Join(configDir, "gpg")
 	p := pass.New(configDir, gpgHome, executor)
 
-	return p.Add(key)
+	if err := p.Add(key); err != nil {
+		return err
+	}
+
+	io.Successfln("Secret added: %s", key)
+
+	secretsPath := filepath.Join(configDir, "secrets")
+
+	gitClient, err := git.New(executor)
+	if err != nil {
+		return fmt.Errorf("failed to initialize git client: %w", err)
+	}
+
+	if err := gitClient.Push(secretsPath, "origin", "master"); err != nil {
+		return fmt.Errorf("failed to push to remote: %w", err)
+	}
+
+	io.Successfln("Pushed to remote repository")
+
+	return nil
 }
