@@ -64,13 +64,17 @@ func (g *Git) ConfigureRemote(repoPath, remoteName, remoteURL string) error {
 	return nil
 }
 
-func (g *Git) Pull(repoPath, remoteName, branch string) error {
+func (g *Git) Pull(repoPath, remoteName, branch string, silent bool) error {
 	slog.Debug("pulling from remote", "path", repoPath, "remote", remoteName, "branch", branch)
 
 	cmd := g.executor.Command(g.BinaryPath, "pull", "--squash", remoteName, branch)
 	cmd.SetDir(repoPath)
 
 	var stderrBuf bytes.Buffer
+	if silent {
+		var stdoutBuf bytes.Buffer
+		cmd.SetStdout(&stdoutBuf)
+	}
 	cmd.SetStderr(&stderrBuf)
 
 	if err := cmd.Run(); err != nil {

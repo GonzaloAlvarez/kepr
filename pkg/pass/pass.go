@@ -30,6 +30,7 @@ import (
 type Pass struct {
 	SecretsPath string
 	GpgHome     string
+	GopassHome  string
 	executor    shell.Executor
 }
 
@@ -37,6 +38,7 @@ func New(configDir, gpgHome string, executor shell.Executor) *Pass {
 	return &Pass{
 		SecretsPath: filepath.Join(configDir, "secrets"),
 		GpgHome:     gpgHome,
+		GopassHome:  filepath.Join(configDir, "gopass"),
 		executor:    executor,
 	}
 }
@@ -60,6 +62,7 @@ func (p *Pass) Init(fingerprint string) error {
 
 	cmd := p.executor.Command(gopassPath, "init", "--path", p.SecretsPath, "--crypto", "gpg", fingerprint)
 	cmd.SetEnv(append(os.Environ(),
+		fmt.Sprintf("GOPASS_HOMEDIR=%s", p.GopassHome),
 		fmt.Sprintf("GNUPGHOME=%s", p.GpgHome),
 		fmt.Sprintf("GIT_AUTHOR_NAME=%s", userName),
 		fmt.Sprintf("GIT_AUTHOR_EMAIL=%s", userEmail),
@@ -113,6 +116,7 @@ func (p *Pass) Add(key string) error {
 
 	cmd := p.executor.Command(gopassPath, "insert", key)
 	cmd.SetEnv(append(os.Environ(),
+		fmt.Sprintf("GOPASS_HOMEDIR=%s", p.GopassHome),
 		fmt.Sprintf("GNUPGHOME=%s", p.GpgHome),
 		fmt.Sprintf("PASSWORD_STORE_DIR=%s", p.SecretsPath),
 		fmt.Sprintf("GIT_AUTHOR_NAME=%s", userName),
@@ -141,6 +145,7 @@ func (p *Pass) Get(key string) error {
 
 	cmd := p.executor.Command(gopassPath, "show", "--password", key)
 	cmd.SetEnv(append(os.Environ(),
+		fmt.Sprintf("GOPASS_HOMEDIR=%s", p.GopassHome),
 		fmt.Sprintf("GNUPGHOME=%s", p.GpgHome),
 		fmt.Sprintf("PASSWORD_STORE_DIR=%s", p.SecretsPath),
 	))
