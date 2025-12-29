@@ -83,14 +83,10 @@ func New(configBaseDir string, executor shell.Executor, io cout.IO) (*GPG, error
 		io:                 io,
 	}
 
-	if err := gpg.writeConfigs(); err != nil {
-		return nil, err
-	}
-
 	return gpg, nil
 }
 
-func (g *GPG) writeConfigs() error {
+func (g *GPG) WriteConfigs() error {
 	gpgConf := generateGPGConf()
 
 	slog.Debug("writing gpg.conf", "path", g.ConfigPath)

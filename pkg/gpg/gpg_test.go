@@ -99,9 +99,9 @@ func TestWriteConfigs(t *testing.T) {
 		io:                 NewMockIO(),
 	}
 
-	err := gpg.writeConfigs()
+	err := gpg.WriteConfigs()
 	if err != nil {
-		t.Fatalf("writeConfigs() failed: %v", err)
+		t.Fatalf("WriteConfigs() failed: %v", err)
 	}
 
 	gpgConfData, err := os.ReadFile(gpg.ConfigPath)
@@ -140,9 +140,9 @@ func TestWriteConfigs_FilePermissions(t *testing.T) {
 		io:                 NewMockIO(),
 	}
 
-	err := gpg.writeConfigs()
+	err := gpg.WriteConfigs()
 	if err != nil {
-		t.Fatalf("writeConfigs() failed: %v", err)
+		t.Fatalf("WriteConfigs() failed: %v", err)
 	}
 
 	gpgConfInfo, err := os.Stat(gpg.ConfigPath)
@@ -174,9 +174,9 @@ func TestWriteConfigs_InvalidPath(t *testing.T) {
 		io:              NewMockIO(),
 	}
 
-	err := gpg.writeConfigs()
+	err := gpg.WriteConfigs()
 	if err == nil {
-		t.Fatal("expected writeConfigs() to fail with invalid path, got nil")
+		t.Fatal("expected WriteConfigs() to fail with invalid path, got nil")
 	}
 }
 

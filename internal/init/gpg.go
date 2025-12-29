@@ -38,6 +38,10 @@ func SetupGPG(executor shell.Executor, io cout.IO) error {
 		return err
 	}
 
+	if err := g.WriteConfigs(); err != nil {
+		return fmt.Errorf("failed to write GPG configs: %w", err)
+	}
+
 	io.Successfln("GPG environment initialized at %s", g.HomeDir)
 
 	fingerprint := config.GetUserFingerprint()
