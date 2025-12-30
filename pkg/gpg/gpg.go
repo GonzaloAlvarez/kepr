@@ -32,6 +32,7 @@ import (
 type GPG struct {
 	BinaryPath         string
 	PinentryPath       string
+	GPGConfPath        string
 	HomeDir            string
 	AgentConfigPath    string
 	ConfigPath         string
@@ -54,6 +55,16 @@ func findPinentry(executor shell.Executor) (string, error) {
 	return "", fmt.Errorf("no pinentry program found (tried: %v)", candidates)
 }
 
+func findGPGConf(executor shell.Executor) string {
+	path, err := executor.LookPath("gpgconf")
+	if err == nil {
+		slog.Debug("found gpgconf", "path", path)
+		return path
+	}
+	slog.Warn("gpgconf not found, some YubiKey operations may fail")
+	return ""
+}
+
 func New(configBaseDir string, executor shell.Executor, io cout.IO) (*GPG, error) {
 	gpgBinary, err := executor.LookPath("gpg")
 	if err != nil {
@@ -66,6 +77,8 @@ func New(configBaseDir string, executor shell.Executor, io cout.IO) (*GPG, error
 		return nil, err
 	}
 
+	gpgconfBinary := findGPGConf(executor)
+
 	homeDir := filepath.Join(configBaseDir, "gpg")
 	slog.Debug("creating gpg home directory", "path", homeDir)
 	if err := os.MkdirAll(homeDir, 0700); err != nil {
@@ -75,6 +88,7 @@ func New(configBaseDir string, executor shell.Executor, io cout.IO) (*GPG, error
 	gpg := &GPG{
 		BinaryPath:         gpgBinary,
 		PinentryPath:       pinentryBinary,
+		GPGConfPath:        gpgconfBinary,
 		HomeDir:            homeDir,
 		AgentConfigPath:    filepath.Join(homeDir, "gpg-agent.conf"),
 		ConfigPath:         filepath.Join(homeDir, "gpg.conf"),
@@ -125,6 +139,7 @@ verify-options show-uid-validity
 func generateSCDaemonConf() string {
 	return `disable-ccid
 pcsc-shared
+card-timeout 5
 `
 }
 
@@ -196,4 +211,62 @@ func (g *GPG) executeWithPinentry(stdin string, args ...string) (string, string,
 	}
 
 	return stdoutBuf.String(), stderrBuf.String(), err
+}
+
+func (g *GPG) replaceSCDaemonConf() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	gnupgDir := filepath.Join(homeDir, ".gnupg")
+	mainSCDaemonPath := filepath.Join(gnupgDir, "scdaemon.conf")
+	backupPath := filepath.Join(gnupgDir, "scdaemon.kepr.bak.conf")
+
+	if _, err := os.Stat(backupPath); err == nil {
+		slog.Debug("backup already exists, skipping replacement")
+		return nil
+	}
+
+	if _, err := os.Stat(mainSCDaemonPath); err == nil {
+		if err := os.Rename(mainSCDaemonPath, backupPath); err != nil {
+			return fmt.Errorf("failed to backup scdaemon.conf: %w", err)
+		}
+		slog.Debug("backed up scdaemon.conf")
+	}
+
+	scDaemonConf := generateSCDaemonConf()
+	if err := os.WriteFile(mainSCDaemonPath, []byte(scDaemonConf), 0600); err != nil {
+		return fmt.Errorf("failed to write scdaemon.conf: %w", err)
+	}
+
+	slog.Debug("replaced scdaemon.conf")
+	return nil
+}
+
+func (g *GPG) revertSCDaemonConf() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	gnupgDir := filepath.Join(homeDir, ".gnupg")
+	mainSCDaemonPath := filepath.Join(gnupgDir, "scdaemon.conf")
+	backupPath := filepath.Join(gnupgDir, "scdaemon.kepr.bak.conf")
+
+	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
+		slog.Debug("no backup to revert")
+		return nil
+	}
+
+	if err := os.Remove(mainSCDaemonPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove scdaemon.conf: %w", err)
+	}
+
+	if err := os.Rename(backupPath, mainSCDaemonPath); err != nil {
+		return fmt.Errorf("failed to restore scdaemon.conf: %w", err)
+	}
+
+	slog.Debug("reverted scdaemon.conf")
+	return nil
 }
