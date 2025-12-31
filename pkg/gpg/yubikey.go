@@ -21,6 +21,8 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+
+	"github.com/gonzaloalvarez/kepr/pkg/config"
 )
 
 type Yubikey struct {
@@ -235,11 +237,61 @@ func (y *Yubikey) IsOccupied() bool {
 	return y.SignatureOccupied || y.EncryptionOccupied
 }
 
-func (y *Yubikey) cardEdit(attribute string, values []string) error {
+func (y *Yubikey) cardEdit(attribute string, values []string, adminPin string) error {
 	if err := y.gpg.replaceSCDaemonConf(); err != nil {
 		slog.Debug("failed to replace scdaemon.conf", "error", err)
 	}
 	y.killSCDaemon()
+
+	if adminPin != "manual" {
+		err := y.tryAutomatedCardEdit(attribute, values, adminPin)
+		if err == nil {
+			if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
+				slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
+			}
+			y.killSCDaemon()
+			return nil
+		}
+		if adminPin == "" && strings.Contains(err.Error(), "bad PIN") {
+			slog.Debug("default pin failed, falling back to interactive")
+			config.SaveYubikeyAdminPin("manual")
+		} else if adminPin != "" {
+			if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
+				slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
+			}
+			y.killSCDaemon()
+			return err
+		}
+	}
+
+	return y.cardEditInteractive(attribute, values)
+}
+
+func (y *Yubikey) tryAutomatedCardEdit(attribute string, values []string, pin string) error {
+	pinToUse := pin
+	if pinToUse == "" {
+		pinToUse = "12345678"
+	}
+
+	valuesStr := strings.Join(values, "\n")
+	stdin := fmt.Sprintf("admin\n%s\n%s\n%s\nquit\n", attribute, valuesStr, pinToUse)
+
+	slog.Debug("editing card with automated pin", "attribute", attribute, "values", values, "stdin", stdin)
+
+	_, stderr, err := y.gpg.execute(stdin, "--pinentry-mode", "loopback", "--command-fd", "0", "--batch", "--expert", "--quiet", "--display-charset", "utf-8", "--card-edit")
+	slog.Debug("automated card edit output", "stderr", stderr)
+	if err != nil {
+		slog.Debug("automated card edit failed", "error", err, "stderr", stderr)
+		if strings.Contains(stderr, "Bad PIN") {
+			return fmt.Errorf("bad PIN")
+		}
+		return fmt.Errorf("failed to edit card attribute %s: %w", attribute, err)
+	}
+
+	return nil
+}
+
+func (y *Yubikey) cardEditInteractive(attribute string, values []string) error {
 	valuesStr := strings.Join(values, "\n")
 	stdin := fmt.Sprintf("admin\n%s\n%s\nquit\n", attribute, valuesStr)
 
@@ -276,10 +328,8 @@ func splitName(name string) (string, string) {
 }
 
 func (y *Yubikey) configureCard(name, email string) error {
-	if err := y.gpg.replaceSCDaemonConf(); err != nil {
-		slog.Debug("failed to replace scdaemon.conf", "error", err)
-	}
-	y.killSCDaemon()
+	adminPin := config.GetYubikeyAdminPin()
+
 	slog.Debug("configuring card", "name", name, "email", email)
 	slog.Debug("cardholder name", "cardholder", y.CardholderName)
 	slog.Debug("login", "login", y.Login)
@@ -287,29 +337,18 @@ func (y *Yubikey) configureCard(name, email string) error {
 		firstName, lastName := splitName(name)
 		slog.Debug("split name", "firstName", firstName, "lastName", lastName)
 
-		if err := y.cardEdit("name", []string{lastName, firstName}); err != nil {
-			if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-				slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-			}
-			y.killSCDaemon()
+		if err := y.cardEdit("name", []string{lastName, firstName}, adminPin); err != nil {
 			return err
 		}
 	}
 
 	if email != "" && (y.Login == "" || y.Login == "[not set]") {
-		if err := y.cardEdit("login", []string{email}); err != nil {
-			if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-				slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-			}
-			y.killSCDaemon()
+		if err := y.cardEdit("login", []string{email}, adminPin); err != nil {
+
 			return err
 		}
 	}
 
-	if err := y.gpg.revertSCDaemonConf(); err != nil {
-		slog.Debug("failed to revert scdaemon.conf", "error", err)
-	}
-	y.killSCDaemon()
 	return nil
 }
 

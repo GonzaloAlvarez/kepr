@@ -128,6 +128,15 @@ func GetUserFingerprint() string {
 	return viper.GetString("user_fingerprint")
 }
 
+func SaveYubikeyAdminPin(pin string) error {
+	viper.Set("yubikey_admin_pin", pin)
+	return writeConfig()
+}
+
+func GetYubikeyAdminPin() string {
+	return viper.GetString("yubikey_admin_pin")
+}
+
 func writeConfig() error {
 	dir, err := Dir()
 	if err != nil {
