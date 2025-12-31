@@ -84,7 +84,17 @@ func SetupGPG(executor shell.Executor, io cout.IO) error {
 func initYubikey(g *gpg.GPG, io cout.IO) error {
 	slog.Debug("checking for YubiKey")
 
+	if err := g.ReplaceSCDaemonConf(); err != nil {
+		slog.Debug("failed to replace scdaemon.conf", "error", err)
+	}
+	defer func() {
+		if err := g.RevertSCDaemonConf(); err != nil {
+			slog.Debug("failed to revert scdaemon.conf", "error", err)
+		}
+	}()
+
 	y := gpg.NewYubikey(g)
+	y.KillSCDaemon()
 
 	err := y.CheckCardPresent()
 	if err != nil {

@@ -75,7 +75,7 @@ allow-loopback-pinentry
 `, pinentryPath)
 }
 
-func (g *GPG) replaceSCDaemonConf() error {
+func (g *GPG) ReplaceSCDaemonConf() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get user home directory: %w", err)
@@ -106,7 +106,7 @@ func (g *GPG) replaceSCDaemonConf() error {
 	return nil
 }
 
-func (g *GPG) revertSCDaemonConf() error {
+func (g *GPG) RevertSCDaemonConf() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get user home directory: %w", err)

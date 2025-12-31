@@ -44,7 +44,7 @@ func NewYubikey(g *GPG) *Yubikey {
 	}
 }
 
-func (y *Yubikey) killSCDaemon() {
+func (y *Yubikey) KillSCDaemon() {
 	if y.gpg.GPGConfPath == "" {
 		slog.Debug("gpgconf not available, skipping scdaemon kill")
 		return
@@ -58,74 +58,42 @@ func (y *Yubikey) killSCDaemon() {
 }
 
 func (y *Yubikey) CheckCardPresent() error {
-	if err := y.gpg.replaceSCDaemonConf(); err != nil {
-		slog.Debug("failed to replace scdaemon.conf", "error", err)
-	}
-	y.killSCDaemon()
 	slog.Debug("checking if card is present")
 
 	stdout, stderr, err := y.gpg.execute("", "--card-status")
 	if err != nil {
 		slog.Debug("card status command failed", "error", err, "stderr", stderr)
-		if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-			slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-		}
-		y.killSCDaemon()
 		return fmt.Errorf("no card found")
 	}
 
 	if strings.Contains(stdout, "no card") || strings.Contains(stderr, "no card") ||
 		strings.Contains(stdout, "Card not present") || strings.Contains(stderr, "Card not present") {
 		slog.Debug("card not present in output")
-		if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-			slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-		}
-		y.killSCDaemon()
 		return fmt.Errorf("no card found")
 	}
 
 	slog.Debug("card is present")
-	if err := y.gpg.revertSCDaemonConf(); err != nil {
-		slog.Debug("failed to revert scdaemon.conf", "error", err)
-	}
-	y.killSCDaemon()
 	return nil
 }
 
 func (y *Yubikey) checkCardStatus() error {
-	if err := y.gpg.replaceSCDaemonConf(); err != nil {
-		slog.Debug("failed to replace scdaemon.conf", "error", err)
-	}
-	y.killSCDaemon()
 	slog.Debug("checking card status")
 
 	stdout, stderr, err := y.gpg.execute("", "--card-status")
 	if err != nil {
 		slog.Debug("card status command failed", "error", err, "stderr", stderr)
-		if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-			slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-		}
-		y.killSCDaemon()
 		return fmt.Errorf("no card found")
 	}
 
 	if strings.Contains(stdout, "no card") || strings.Contains(stderr, "no card") ||
 		strings.Contains(stdout, "Card not present") || strings.Contains(stderr, "Card not present") {
 		slog.Debug("card not present in output")
-		if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-			slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-		}
-		y.killSCDaemon()
 		return fmt.Errorf("no card found")
 	}
 
 	slog.Debug("card status output", "stdout", stdout, "stderr", stderr)
 
 	if err := y.parseCardStatus(stdout); err != nil {
-		if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-			slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-		}
-		y.killSCDaemon()
 		return fmt.Errorf("failed to parse card status: %w", err)
 	}
 
@@ -133,10 +101,6 @@ func (y *Yubikey) checkCardStatus() error {
 		"sig_occupied", y.SignatureOccupied,
 		"enc_occupied", y.EncryptionOccupied)
 
-	if err := y.gpg.revertSCDaemonConf(); err != nil {
-		slog.Debug("failed to revert scdaemon.conf", "error", err)
-	}
-	y.killSCDaemon()
 	return nil
 }
 
@@ -238,28 +202,15 @@ func (y *Yubikey) IsOccupied() bool {
 }
 
 func (y *Yubikey) cardEdit(attribute string, values []string, adminPin string) error {
-	if err := y.gpg.replaceSCDaemonConf(); err != nil {
-		slog.Debug("failed to replace scdaemon.conf", "error", err)
-	}
-	y.killSCDaemon()
-
 	if adminPin != "manual" {
 		err := y.tryAutomatedCardEdit(attribute, values, adminPin)
 		if err == nil {
-			if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-				slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-			}
-			y.killSCDaemon()
 			return nil
 		}
 		if adminPin == "" && strings.Contains(err.Error(), "bad PIN") {
 			slog.Debug("default pin failed, falling back to interactive")
 			config.SaveYubikeyAdminPin("manual")
 		} else if adminPin != "" {
-			if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-				slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-			}
-			y.killSCDaemon()
 			return err
 		}
 	}
@@ -301,17 +252,9 @@ func (y *Yubikey) cardEditInteractive(attribute string, values []string) error {
 	_, stderr, err := y.gpg.executeWithPinentry(stdin, "--quiet", "--card-edit", "--expert", "--batch", "--display-charset", "utf-8", "--command-fd", "3")
 	if err != nil {
 		slog.Debug("card edit failed", "error", err, "stderr", stderr)
-		if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-			slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-		}
-		y.killSCDaemon()
 		return fmt.Errorf("failed to edit card attribute %s: %w", attribute, err)
 	}
 
-	if err := y.gpg.revertSCDaemonConf(); err != nil {
-		slog.Debug("failed to revert scdaemon.conf", "error", err)
-	}
-	y.killSCDaemon()
 	return nil
 }
 
@@ -333,6 +276,14 @@ func (y *Yubikey) configureCard(name, email string) error {
 	slog.Debug("configuring card", "name", name, "email", email)
 	slog.Debug("cardholder name", "cardholder", y.CardholderName)
 	slog.Debug("login", "login", y.Login)
+
+	if email != "" && (y.Login == "" || y.Login == "[not set]") {
+		if err := y.cardEdit("login", []string{email}, adminPin); err != nil {
+
+			return err
+		}
+	}
+
 	if name != "" && (y.CardholderName == "" || y.CardholderName == "[not set]") {
 		firstName, lastName := splitName(name)
 		slog.Debug("split name", "firstName", firstName, "lastName", lastName)
@@ -342,21 +293,10 @@ func (y *Yubikey) configureCard(name, email string) error {
 		}
 	}
 
-	if email != "" && (y.Login == "" || y.Login == "[not set]") {
-		if err := y.cardEdit("login", []string{email}, adminPin); err != nil {
-
-			return err
-		}
-	}
-
 	return nil
 }
 
 func (y *Yubikey) encryptionKeyToYubikey(fingerprint string) error {
-	if err := y.gpg.replaceSCDaemonConf(); err != nil {
-		slog.Debug("failed to replace scdaemon.conf", "error", err)
-	}
-	y.killSCDaemon()
 	slog.Debug("moving encryption key to yubikey", "fingerprint", fingerprint)
 
 	stdin := "key 1\nkeytocard\n2\nsave\n"
@@ -364,17 +304,9 @@ func (y *Yubikey) encryptionKeyToYubikey(fingerprint string) error {
 	_, stderr, err := y.gpg.executeWithPinentry(stdin, "--command-fd", "3", "--batch", "--edit-key", fingerprint)
 	if err != nil {
 		slog.Debug("failed to move key to card", "error", err, "stderr", stderr)
-		if revertErr := y.gpg.revertSCDaemonConf(); revertErr != nil {
-			slog.Debug("failed to revert scdaemon.conf", "error", revertErr)
-		}
-		y.killSCDaemon()
 		return fmt.Errorf("failed to move encryption key to yubikey: %w", err)
 	}
 
 	slog.Debug("encryption key moved to yubikey successfully")
-	if err := y.gpg.revertSCDaemonConf(); err != nil {
-		slog.Debug("failed to revert scdaemon.conf", "error", err)
-	}
-	y.killSCDaemon()
 	return nil
 }
