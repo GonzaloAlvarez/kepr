@@ -17,12 +17,19 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package gpg
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
+)
+
+var (
+	ErrManualModeRequired = errors.New("manual mode required")
+	ErrBadPIN             = errors.New("bad PIN")
 )
 
 type Yubikey struct {
@@ -51,7 +58,7 @@ func (y *Yubikey) KillSCDaemon() {
 	}
 
 	slog.Debug("killing scdaemon")
-	cmd := y.gpg.executor.Command(y.gpg.GPGConfPath, "--kill", "all")
+	cmd := y.gpg.executor.Command(y.gpg.GPGConfPath, "--kill", "scdaemon")
 	if err := cmd.Run(); err != nil {
 		slog.Debug("failed to kill scdaemon", "error", err)
 	}
@@ -202,59 +209,105 @@ func (y *Yubikey) IsOccupied() bool {
 }
 
 func (y *Yubikey) cardEdit(attribute string, values []string, adminPin string) error {
+	baseArgs := []string{"--card-edit"}
+	commands := []string{"admin", attribute}
+	commands = append(commands, values...)
+	commands = append(commands, "quit")
+
 	if adminPin != "manual" {
-		err := y.tryAutomatedCardEdit(attribute, values, adminPin)
+		err := y.automatedYubikey(baseArgs, commands)
 		if err == nil {
 			return nil
 		}
-		if adminPin == "" && strings.Contains(err.Error(), "bad PIN") {
-			slog.Debug("default pin failed, falling back to interactive")
+		if errors.Is(err, ErrBadPIN) && adminPin == "" {
+			slog.Debug("default pin failed, falling back to manual")
 			config.SaveYubikeyAdminPin("manual")
 		} else if adminPin != "" {
 			return err
 		}
 	}
 
-	return y.cardEditInteractive(attribute, values)
+	return y.manualYubikey(baseArgs, commands)
 }
 
-func (y *Yubikey) tryAutomatedCardEdit(attribute string, values []string, pin string) error {
-	pinToUse := pin
+func (y *Yubikey) automatedYubikey(baseArgs []string, commands []string) error {
+	adminPin := config.GetYubikeyAdminPin()
+	if adminPin == "manual" {
+		return ErrManualModeRequired
+	}
+
+	pinToUse := adminPin
 	if pinToUse == "" {
 		pinToUse = "12345678"
 	}
 
-	valuesStr := strings.Join(values, "\n")
-	stdin := fmt.Sprintf("admin\n%s\n%s\n%s\nquit\n", attribute, valuesStr, pinToUse)
-
-	slog.Debug("editing card with automated pin", "attribute", attribute, "values", values, "stdin", stdin)
-
-	_, stderr, err := y.gpg.execute(stdin, "--pinentry-mode", "loopback", "--command-fd", "0", "--batch", "--expert", "--quiet", "--display-charset", "utf-8", "--card-edit")
-	slog.Debug("automated card edit output", "stderr", stderr)
-	if err != nil {
-		slog.Debug("automated card edit failed", "error", err, "stderr", stderr)
-		if strings.Contains(stderr, "Bad PIN") {
-			return fmt.Errorf("bad PIN")
-		}
-		return fmt.Errorf("failed to edit card attribute %s: %w", attribute, err)
+	args := []string{
+		"--pinentry-mode", "loopback",
+		"--command-fd", "0",
+		"--status-fd", "3",
+		"--display-charset", "utf-8",
+		"--batch",
+		"--with-colons",
+		"--expert",
 	}
 
+	if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
+		args = append(args, "--debug-all")
+	} else {
+		args = append(args, "--quiet")
+	}
+
+	args = append(args, baseArgs...)
+
+	slog.Debug("starting automated yubikey operation", "args", args, "commands", commands)
+
+	session, err := y.gpg.ExecuteInteractive(args...)
+	if err != nil {
+		return fmt.Errorf("failed to start interactive session: %w", err)
+	}
+
+	go y.gpgInputHandler(session, commands, pinToUse)
+
+	err = <-session.Done
+	if err != nil {
+		slog.Debug("automated yubikey operation failed", "error", err)
+		if errors.Is(err, ErrBadPIN) {
+			return ErrBadPIN
+		}
+		return fmt.Errorf("automated yubikey operation failed: %w", err)
+	}
+
+	slog.Debug("automated yubikey operation completed successfully")
 	return nil
 }
 
-func (y *Yubikey) cardEditInteractive(attribute string, values []string) error {
-	valuesStr := strings.Join(values, "\n")
-	stdin := fmt.Sprintf("admin\n%s\n%s\nquit\n", attribute, valuesStr)
-
-	slog.Debug("editing card", "attribute", attribute, "values", values)
-	slog.Debug("stdin", "stdin", stdin)
-
-	_, stderr, err := y.gpg.executeWithPinentry(stdin, "--quiet", "--card-edit", "--expert", "--batch", "--display-charset", "utf-8", "--command-fd", "3")
-	if err != nil {
-		slog.Debug("card edit failed", "error", err, "stderr", stderr)
-		return fmt.Errorf("failed to edit card attribute %s: %w", attribute, err)
+func (y *Yubikey) manualYubikey(baseArgs []string, commands []string) error {
+	args := []string{
+		"--command-fd", "3",
+		"--batch",
+		"--display-charset", "utf-8",
+		"--expert",
 	}
 
+	if slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
+		args = append(args, "--debug-all")
+	} else {
+		args = append(args, "--quiet")
+	}
+
+	args = append(args, baseArgs...)
+
+	stdin := strings.Join(commands, "\n") + "\n"
+
+	slog.Debug("starting manual yubikey operation", "args", args, "stdin", stdin)
+
+	_, stderr, err := y.gpg.executeWithPinentry(stdin, args...)
+	if err != nil {
+		slog.Debug("manual yubikey operation failed", "error", err, "stderr", stderr)
+		return fmt.Errorf("manual yubikey operation failed: %w", err)
+	}
+
+	slog.Debug("manual yubikey operation completed successfully")
 	return nil
 }
 
@@ -279,7 +332,6 @@ func (y *Yubikey) configureCard(name, email string) error {
 
 	if email != "" && (y.Login == "" || y.Login == "[not set]") {
 		if err := y.cardEdit("login", []string{email}, adminPin); err != nil {
-
 			return err
 		}
 	}
@@ -299,14 +351,63 @@ func (y *Yubikey) configureCard(name, email string) error {
 func (y *Yubikey) encryptionKeyToYubikey(fingerprint string) error {
 	slog.Debug("moving encryption key to yubikey", "fingerprint", fingerprint)
 
-	stdin := "key 1\nkeytocard\n2\nsave\n"
+	adminPin := config.GetYubikeyAdminPin()
+	baseArgs := []string{"--edit-key", fingerprint}
+	commands := []string{"key 1", "keytocard", "2", "save"}
 
-	_, stderr, err := y.gpg.executeWithPinentry(stdin, "--command-fd", "3", "--batch", "--edit-key", fingerprint)
+	if adminPin != "manual" {
+		err := y.automatedYubikey(baseArgs, commands)
+		if err == nil {
+			slog.Debug("encryption key moved to yubikey successfully")
+			return nil
+		}
+		if errors.Is(err, ErrBadPIN) && adminPin == "" {
+			slog.Debug("default pin failed, falling back to manual")
+			config.SaveYubikeyAdminPin("manual")
+		} else if adminPin != "" {
+			return fmt.Errorf("failed to move encryption key to yubikey: %w", err)
+		}
+	}
+
+	err := y.manualYubikey(baseArgs, commands)
 	if err != nil {
-		slog.Debug("failed to move key to card", "error", err, "stderr", stderr)
 		return fmt.Errorf("failed to move encryption key to yubikey: %w", err)
 	}
 
 	slog.Debug("encryption key moved to yubikey successfully")
 	return nil
+}
+
+func (y *Yubikey) gpgInputHandler(session *GPGSession, commands []string, pin string) {
+	defer close(session.SendInput)
+
+	commandIndex := 0
+
+	for statusLine := range session.StatusMessages {
+		slog.Debug("gpg status line", "status", statusLine)
+		if !strings.HasPrefix(statusLine, "[GNUPG:]") {
+			continue
+		}
+
+		parts := strings.Fields(statusLine)
+		if len(parts) < 2 {
+			continue
+		}
+
+		statusType := parts[1]
+
+		switch statusType {
+		case "GET_LINE":
+			if commandIndex < len(commands) {
+				session.SendInput <- commands[commandIndex]
+				commandIndex++
+			}
+		case "GET_HIDDEN":
+			session.SendInput <- pin
+		case "SC_OP_FAILURE":
+			slog.Debug("gpg operation failed", "status", statusLine)
+		case "FAILURE":
+			slog.Debug("gpg failure", "status", statusLine)
+		}
+	}
 }

@@ -17,6 +17,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package gpg
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"log/slog"
@@ -39,6 +40,12 @@ type GPG struct {
 	SCDaemonConfigPath string
 	executor           shell.Executor
 	io                 cout.IO
+}
+
+type GPGSession struct {
+	StatusMessages <-chan string
+	SendInput      chan<- string
+	Done           <-chan error
 }
 
 func findPinentry(executor shell.Executor) (string, error) {
@@ -160,4 +167,88 @@ func (g *GPG) executeWithPinentry(stdin string, args ...string) (string, string,
 	}
 
 	return stdoutBuf.String(), stderrBuf.String(), err
+}
+
+func (g *GPG) ExecuteInteractive(args ...string) (*GPGSession, error) {
+	cmd := g.executor.Command(g.BinaryPath, args...)
+	cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir)))
+
+	stdinReader, stdinWriter, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stdin pipe: %w", err)
+	}
+
+	statusReader, statusWriter, err := os.Pipe()
+	if err != nil {
+		stdinReader.Close()
+		stdinWriter.Close()
+		return nil, fmt.Errorf("failed to create status pipe: %w", err)
+	}
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.SetStdin(stdinReader)
+	cmd.SetStdout(&stdoutBuf)
+	cmd.SetStderr(&stderrBuf)
+	cmd.SetExtraFiles([]*os.File{statusWriter})
+
+	statusChan := make(chan string)
+	inputChan := make(chan string)
+	doneChan := make(chan error, 1)
+
+	if err := cmd.Start(); err != nil {
+		stdinReader.Close()
+		stdinWriter.Close()
+		statusReader.Close()
+		statusWriter.Close()
+		return nil, fmt.Errorf("failed to start command: %w", err)
+	}
+
+	statusWriter.Close()
+
+	go func() {
+		scanner := bufio.NewScanner(statusReader)
+		for scanner.Scan() {
+			line := scanner.Text()
+			slog.Debug("gpg status", "line", line)
+			statusChan <- line
+		}
+		close(statusChan)
+		statusReader.Close()
+	}()
+
+	go func() {
+		writer := bufio.NewWriter(stdinWriter)
+		for input := range inputChan {
+			slog.Debug("sending to gpg", "input", input)
+			writer.WriteString(input + "\n")
+			writer.Flush()
+		}
+		stdinWriter.Close()
+		stdinReader.Close()
+	}()
+
+	go func() {
+		err := cmd.Wait()
+		stderr := stderrBuf.String()
+		stdout := stdoutBuf.String()
+
+		slog.Debug("gpg command completed", "error", err, "stderr", stderr, "stdout", stdout)
+
+		if err != nil {
+			if strings.Contains(stderr, "Bad PIN") {
+				doneChan <- ErrBadPIN
+			} else {
+				doneChan <- fmt.Errorf("gpg command failed: %w", err)
+			}
+		} else {
+			doneChan <- nil
+		}
+		close(doneChan)
+	}()
+
+	return &GPGSession{
+		StatusMessages: statusChan,
+		SendInput:      inputChan,
+		Done:           doneChan,
+	}, nil
 }
