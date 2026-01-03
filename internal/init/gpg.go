@@ -17,6 +17,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package initialize
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -143,6 +144,22 @@ func initYubikey(g *gpg.GPG, io cout.IO) error {
 		}
 	} else {
 		io.Successfln("YubiKey provisioned successfully (Serial: %s).", y.SerialNumber)
+	}
+
+	y.KillSCDaemon()
+	adminPin := config.GetYubikeyAdminPin()
+	if adminPin != "manual" {
+		slog.Debug("verifying yubikey user pin")
+		err := y.VerifyUserPin()
+		if errors.Is(err, gpg.ErrBadPIN) {
+			slog.Debug("default user pin failed, setting to manual")
+			config.SaveYubikeyUserPin("manual")
+		} else if err == nil {
+			slog.Debug("default user pin verified, saving to config")
+			config.SaveYubikeyUserPin("123456")
+		} else {
+			slog.Debug("user pin verification failed with unexpected error", "error", err)
+		}
 	}
 
 	return nil

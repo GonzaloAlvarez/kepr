@@ -25,6 +25,7 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/git"
 	"github.com/gonzaloalvarez/kepr/pkg/github"
+	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/pass"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
@@ -59,5 +60,26 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 	gpgHome := filepath.Join(configDir, "gpg")
 	p := pass.New(configDir, gpgHome, executor)
 
-	return p.Get(key)
+	userPin := config.GetYubikeyUserPin()
+	if userPin != "" && userPin != "manual" {
+		g, err := gpg.New(configDir, executor, io)
+		if err != nil {
+			return fmt.Errorf("failed to initialize gpg: %w", err)
+		}
+
+		y := gpg.NewYubikey(g)
+		if err != nil {
+			return fmt.Errorf("failed to initialize yubikey: %w", err)
+		}
+
+		y.KillSCDaemon()
+
+		if y.CheckCardPresent() != nil {
+			return fmt.Errorf("no yubikey detected")
+		}
+
+		return p.Get(key, &userPin)
+	}
+
+	return p.Get(key, nil)
 }

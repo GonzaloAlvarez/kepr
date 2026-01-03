@@ -27,6 +27,13 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 )
 
+type PinType int
+
+const (
+	PinTypeAdmin PinType = iota
+	PinTypeUser
+)
+
 var (
 	ErrManualModeRequired = errors.New("manual mode required")
 	ErrBadPIN             = errors.New("bad PIN")
@@ -215,7 +222,7 @@ func (y *Yubikey) cardEdit(attribute string, values []string, adminPin string) e
 	commands = append(commands, "quit")
 
 	if adminPin != "manual" {
-		err := y.automatedYubikey(baseArgs, commands)
+		err := y.automatedYubikey(baseArgs, commands, PinTypeAdmin)
 		if err == nil {
 			return nil
 		}
@@ -230,15 +237,25 @@ func (y *Yubikey) cardEdit(attribute string, values []string, adminPin string) e
 	return y.manualYubikey(baseArgs, commands)
 }
 
-func (y *Yubikey) automatedYubikey(baseArgs []string, commands []string) error {
-	adminPin := config.GetYubikeyAdminPin()
-	if adminPin == "manual" {
-		return ErrManualModeRequired
-	}
+func (y *Yubikey) automatedYubikey(baseArgs []string, commands []string, pinType PinType) error {
+	var pinToUse string
 
-	pinToUse := adminPin
-	if pinToUse == "" {
-		pinToUse = "12345678"
+	if pinType == PinTypeUser {
+		userPin := config.GetYubikeyUserPin()
+		pinToUse = userPin
+		if pinToUse == "" {
+			pinToUse = "123456"
+		}
+	} else {
+		adminPin := config.GetYubikeyAdminPin()
+		if adminPin == "manual" {
+			return ErrManualModeRequired
+		}
+
+		pinToUse = adminPin
+		if pinToUse == "" {
+			pinToUse = "12345678"
+		}
 	}
 
 	args := []string{
@@ -266,9 +283,20 @@ func (y *Yubikey) automatedYubikey(baseArgs []string, commands []string) error {
 		return fmt.Errorf("failed to start interactive session: %w", err)
 	}
 
-	go y.gpgInputHandler(session, commands, pinToUse)
+	handlerErr := make(chan error, 1)
+	go y.gpgInputHandler(session, commands, pinToUse, handlerErr)
 
 	err = <-session.Done
+
+	select {
+	case hErr := <-handlerErr:
+		if hErr != nil {
+			slog.Debug("automated yubikey operation failed in handler", "error", hErr)
+			return hErr
+		}
+	default:
+	}
+
 	if err != nil {
 		slog.Debug("automated yubikey operation failed", "error", err)
 		if errors.Is(err, ErrBadPIN) {
@@ -356,7 +384,7 @@ func (y *Yubikey) encryptionKeyToYubikey(fingerprint string) error {
 	commands := []string{"key 1", "keytocard", "2", "save"}
 
 	if adminPin != "manual" {
-		err := y.automatedYubikey(baseArgs, commands)
+		err := y.automatedYubikey(baseArgs, commands, PinTypeAdmin)
 		if err == nil {
 			slog.Debug("encryption key moved to yubikey successfully")
 			return nil
@@ -378,10 +406,27 @@ func (y *Yubikey) encryptionKeyToYubikey(fingerprint string) error {
 	return nil
 }
 
-func (y *Yubikey) gpgInputHandler(session *GPGSession, commands []string, pin string) {
+func (y *Yubikey) VerifyUserPin() error {
+	slog.Debug("verifying yubikey user pin")
+
+	baseArgs := []string{"--card-edit"}
+	commands := []string{"verify", "quit"}
+
+	err := y.automatedYubikey(baseArgs, commands, PinTypeUser)
+	if err != nil {
+		slog.Debug("user pin verification failed", "error", err)
+		return err
+	}
+
+	slog.Debug("user pin verification successful")
+	return nil
+}
+
+func (y *Yubikey) gpgInputHandler(session *GPGSession, commands []string, pin string, errChan chan<- error) {
 	defer close(session.SendInput)
 
 	commandIndex := 0
+	var lastFailure string
 
 	for statusLine := range session.StatusMessages {
 		slog.Debug("gpg status line", "status", statusLine)
@@ -406,8 +451,16 @@ func (y *Yubikey) gpgInputHandler(session *GPGSession, commands []string, pin st
 			session.SendInput <- pin
 		case "SC_OP_FAILURE":
 			slog.Debug("gpg operation failed", "status", statusLine)
+			lastFailure = statusLine
 		case "FAILURE":
 			slog.Debug("gpg failure", "status", statusLine)
+			lastFailure = statusLine
 		}
+	}
+
+	if lastFailure != "" {
+		errChan <- fmt.Errorf("gpg operation failed: %s", lastFailure)
+	} else {
+		errChan <- nil
 	}
 }

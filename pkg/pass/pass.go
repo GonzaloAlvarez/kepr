@@ -135,7 +135,7 @@ func (p *Pass) Add(key string) error {
 	return nil
 }
 
-func (p *Pass) Get(key string) error {
+func (p *Pass) Get(key string, userPin *string) error {
 	slog.Debug("getting secret from password store", "key", key)
 
 	gopassPath, err := p.executor.LookPath("gopass")
@@ -144,11 +144,19 @@ func (p *Pass) Get(key string) error {
 	}
 
 	cmd := p.executor.Command(gopassPath, "show", "--password", key)
-	cmd.SetEnv(append(os.Environ(),
+
+	env := append(os.Environ(),
 		fmt.Sprintf("GOPASS_HOMEDIR=%s", p.GopassHome),
 		fmt.Sprintf("GNUPGHOME=%s", p.GpgHome),
 		fmt.Sprintf("PASSWORD_STORE_DIR=%s", p.SecretsPath),
-	))
+	)
+
+	if userPin != nil {
+		gpgOpts := fmt.Sprintf("--pinentry-mode loopback --no-tty --quiet --display-charset utf-8 --batch --passphrase %s", *userPin)
+		env = append(env, fmt.Sprintf("GOPASS_GPG_OPTS=%s", gpgOpts))
+	}
+
+	cmd.SetEnv(env)
 
 	cmd.SetStdin(os.Stdin)
 	cmd.SetStdout(os.Stdout)
