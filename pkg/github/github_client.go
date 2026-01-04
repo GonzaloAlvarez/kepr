@@ -23,6 +23,7 @@ import (
 	"net/http"
 
 	"github.com/cli/oauth/device"
+	"github.com/gonzaloalvarez/kepr/internal/buildflags"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/google/go-github/v67/github"
 	"golang.org/x/oauth2"
@@ -41,7 +42,11 @@ func NewGitHubClient() *GitHubClient {
 
 func (c *GitHubClient) Authenticate(clientID string, io cout.IO) (string, error) {
 	httpClient := &http.Client{}
-	scopes := []string{"repo", "read:org", "user:email", "delete_repo"}
+	scopes := []string{"repo", "read:org", "user:email"}
+
+	if buildflags.IsDev() {
+		scopes = append(scopes, "delete_repo")
+	}
 
 	slog.Debug("requesting device code", "scopes", scopes)
 	code, err := device.RequestCode(httpClient, "https://github.com/login/device/code", clientID, scopes)

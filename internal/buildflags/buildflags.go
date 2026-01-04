@@ -14,30 +14,17 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
-package main
+package buildflags
 
-import (
-	"log/slog"
-	"os"
-
-	"github.com/gonzaloalvarez/kepr/cmd"
-	"github.com/gonzaloalvarez/kepr/internal/buildflags"
-	"github.com/gonzaloalvarez/kepr/pkg/cout"
-	"github.com/gonzaloalvarez/kepr/pkg/github"
-	"github.com/gonzaloalvarez/kepr/pkg/shell"
+var (
+	Env     = "prod"
+	Version = "0.0.1"
 )
 
-func main() {
-	slog.Info("kepr starting", "version", buildflags.Version, "env", buildflags.Env)
+func IsDev() bool {
+	return Env == "dev"
+}
 
-	app := &cmd.App{
-		Shell:  &shell.SystemExecutor{},
-		UI:     cout.NewTerminal(),
-		GitHub: github.NewGitHubClient(),
-	}
-
-	rootCmd := cmd.NewRootCmd(app)
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+func IsProd() bool {
+	return Env != "dev"
 }
