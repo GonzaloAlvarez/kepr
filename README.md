@@ -1,6 +1,12 @@
+<div align="center">
+  <img src="assets/img/kepr_icon.jpg" alt="kepr icon" width="200"/>
+</div>
+
+---
+
 # kepr
 
-**kepr** (Key Encrypted Distributed Repository) is an opinionated, serverless, and secure command-line secret manager. It serves as an orchestrator for industry-standard tools—`gpg`, `gopass`, and `git`—to provide a seamless experience for managing encrypted secrets backed by hardware security modules (YubiKeys).
+**kepr** (Key Encrypted Private Ring) is an opinionated, serverless, and secure command-line secret manager. It serves as an orchestrator for industry-standard tools—`gpg`, `gopass`, and `git`—to provide a seamless experience for managing encrypted secrets backed by hardware security modules (YubiKeys).
 
 ## Motivation
 
