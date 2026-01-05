@@ -49,12 +49,24 @@ type Yubikey struct {
 	Login              string
 	SignatureOccupied  bool
 	EncryptionOccupied bool
+	AdminPin           string
+	UserPin            string
 	gpg                *GPG
 }
 
 func NewYubikey(g *GPG) *Yubikey {
+	adminPin := config.GetYubikeyAdminPin()
+	if adminPin == "" {
+		adminPin = "12345678"
+	}
+	userPin := config.GetYubikeyUserPin()
+	if userPin == "" {
+		userPin = "123456"
+	}
 	return &Yubikey{
-		gpg: g,
+		gpg:      g,
+		AdminPin: adminPin,
+		UserPin:  userPin,
 	}
 }
 
@@ -228,6 +240,7 @@ func (y *Yubikey) cardEdit(attribute string, values []string, adminPin string) e
 		}
 		if errors.Is(err, ErrBadPIN) && adminPin == "" {
 			slog.Debug("default pin failed, falling back to manual")
+			y.AdminPin = "manual"
 			config.SaveYubikeyAdminPin("manual")
 		} else if adminPin != "" {
 			return err
@@ -241,21 +254,12 @@ func (y *Yubikey) automatedYubikey(baseArgs []string, commands []string, pinType
 	var pinToUse string
 
 	if pinType == PinTypeUser {
-		userPin := config.GetYubikeyUserPin()
-		pinToUse = userPin
-		if pinToUse == "" {
-			pinToUse = "123456"
-		}
+		pinToUse = y.UserPin
 	} else {
-		adminPin := config.GetYubikeyAdminPin()
-		if adminPin == "manual" {
+		if y.AdminPin == "manual" {
 			return ErrManualModeRequired
 		}
-
-		pinToUse = adminPin
-		if pinToUse == "" {
-			pinToUse = "12345678"
-		}
+		pinToUse = y.AdminPin
 	}
 
 	args := []string{
@@ -292,6 +296,9 @@ func (y *Yubikey) automatedYubikey(baseArgs []string, commands []string, pinType
 	case hErr := <-handlerErr:
 		if hErr != nil {
 			slog.Debug("automated yubikey operation failed in handler", "error", hErr)
+			if strings.Contains(hErr.Error(), "Bad PIN") {
+				return ErrBadPIN
+			}
 			return hErr
 		}
 	default:
@@ -391,6 +398,7 @@ func (y *Yubikey) encryptionKeyToYubikey(fingerprint string) error {
 		}
 		if errors.Is(err, ErrBadPIN) && adminPin == "" {
 			slog.Debug("default pin failed, falling back to manual")
+			y.AdminPin = "manual"
 			config.SaveYubikeyAdminPin("manual")
 		} else if adminPin != "" {
 			return fmt.Errorf("failed to move encryption key to yubikey: %w", err)
@@ -447,14 +455,24 @@ func (y *Yubikey) gpgInputHandler(session *GPGSession, commands []string, pin st
 				session.SendInput <- commands[commandIndex]
 				commandIndex++
 			}
+			session.LastInput = line
 		case "GET_HIDDEN":
 			session.SendInput <- pin
+			session.LastInput = hidden
 		case "SC_OP_FAILURE":
 			slog.Debug("gpg operation failed", "status", statusLine)
-			lastFailure = statusLine
+			if session.LastInput == hidden {
+				slog.Debug("bad pin detected", "status", statusLine)
+				lastFailure = "Bad PIN"
+			} else {
+				slog.Debug("other failure detected", "status", statusLine)
+				lastFailure = statusLine
+			}
 		case "FAILURE":
 			slog.Debug("gpg failure", "status", statusLine)
-			lastFailure = statusLine
+			if !strings.Contains(statusLine, "Bad PIN") {
+				lastFailure = statusLine
+			}
 		}
 	}
 

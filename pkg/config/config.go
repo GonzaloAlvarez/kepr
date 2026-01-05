@@ -146,6 +146,15 @@ func GetYubikeyUserPin() string {
 	return viper.GetString("yubikey_user_pin")
 }
 
+func SaveYubikeySerial(serial string) error {
+	viper.Set("yubikey_serial", serial)
+	return writeConfig()
+}
+
+func GetYubikeySerial() string {
+	return viper.GetString("yubikey_serial")
+}
+
 func writeConfig() error {
 	dir, err := Dir()
 	if err != nil {

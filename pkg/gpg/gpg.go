@@ -42,9 +42,18 @@ type GPG struct {
 	io                 cout.IO
 }
 
+type GpGRequestLineType int
+
+const (
+	line GpGRequestLineType = iota
+	hidden
+	failure
+)
+
 type GPGSession struct {
 	StatusMessages <-chan string
 	SendInput      chan<- string
+	LastInput      GpGRequestLineType
 	Done           <-chan error
 }
 
@@ -249,6 +258,7 @@ func (g *GPG) ExecuteInteractive(args ...string) (*GPGSession, error) {
 	return &GPGSession{
 		StatusMessages: statusChan,
 		SendInput:      inputChan,
+		LastInput:      line,
 		Done:           doneChan,
 	}, nil
 }

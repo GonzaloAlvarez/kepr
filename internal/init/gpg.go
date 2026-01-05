@@ -146,19 +146,40 @@ func initYubikey(g *gpg.GPG, io cout.IO) error {
 		io.Successfln("YubiKey provisioned successfully (Serial: %s).", y.SerialNumber)
 	}
 
+	if err := config.SaveYubikeyAdminPin(y.AdminPin); err != nil {
+		slog.Warn("failed to save yubikey admin pin", "error", err)
+	} else {
+		slog.Debug("saved yubikey admin pin to config", "pin", y.AdminPin)
+	}
+
 	y.KillSCDaemon()
-	adminPin := config.GetYubikeyAdminPin()
-	if adminPin != "manual" {
+	if y.AdminPin != "manual" {
 		slog.Debug("verifying yubikey user pin")
 		err := y.VerifyUserPin()
 		if errors.Is(err, gpg.ErrBadPIN) {
 			slog.Debug("default user pin failed, setting to manual")
+			y.UserPin = "manual"
 			config.SaveYubikeyUserPin("manual")
 		} else if err == nil {
 			slog.Debug("default user pin verified, saving to config")
+			y.UserPin = "123456"
 			config.SaveYubikeyUserPin("123456")
 		} else {
 			slog.Debug("user pin verification failed with unexpected error", "error", err)
+		}
+	}
+
+	if err := config.SaveYubikeyUserPin(y.UserPin); err != nil {
+		slog.Warn("failed to save yubikey user pin", "error", err)
+	} else {
+		slog.Debug("saved yubikey user pin to config", "pin", y.UserPin)
+	}
+
+	if y.SerialNumber != "" {
+		if err := config.SaveYubikeySerial(y.SerialNumber); err != nil {
+			slog.Warn("failed to save yubikey serial", "error", err)
+		} else {
+			slog.Debug("saved yubikey serial to config", "serial", y.SerialNumber)
 		}
 	}
 
