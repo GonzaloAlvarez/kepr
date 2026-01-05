@@ -19,7 +19,8 @@ package github
 import "github.com/gonzaloalvarez/kepr/pkg/cout"
 
 type Client interface {
-	Authenticate(clientID string, io cout.IO) (string, error)
+	CodeBasedAuthentication(clientID string, io cout.IO) (string, error)
+	PKCEAuthentication(clientID, clientSecret string, io cout.IO) (string, error)
 	SetToken(token string)
 	GetUserIdentity() (name string, email string, err error)
 	CheckRepoExists(name string) (bool, error)

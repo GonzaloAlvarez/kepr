@@ -57,3 +57,4 @@ cover.out
 # Environment or config files
 .env
 .env.*
+github_app_credentials.env

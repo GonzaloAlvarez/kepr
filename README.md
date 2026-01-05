@@ -35,6 +35,30 @@ go install github.com/gonzaloalvarez/kepr@latest
 which gpg git gopass
 ```
 
+### Building from Source
+
+If you're building from source (e.g., for development or forking):
+
+1. Clone the repository
+2. Build using make:
+   ```bash
+   make build          # Production build
+   make dev            # Development build (with dev features)
+   ```
+
+**Optional: Enable PKCE Authentication (Recommended for Desktop Users)**
+
+By default, kepr uses GitHub's device code flow for authentication. To enable PKCE authentication for a smoother UX (no copy-pasting codes):
+
+1. Create `github_app_credentials.env` from the example file:
+   ```bash
+   cp github_app_credentials.env.example github_app_credentials.env
+   ```
+2. Add your GitHub OAuth App credentials (client ID and client secret) to `github_app_credentials.env`
+3. Rebuild - credentials will be embedded at compile time
+
+The `github_app_credentials.env` file is gitignored and will never be committed. If credentials are not provided, kepr automatically falls back to device code authentication.
+
 ## Usage
 
 ### Initialization (Onboarding)

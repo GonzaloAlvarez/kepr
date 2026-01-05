@@ -25,14 +25,25 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/github"
 )
 
-const githubClientID = "Ov23liaarzPv4HBvyPtW"
+var (
+	githubClientID     = "Ov23liaarzPv4HBvyPtW"
+	githubClientSecret = ""
+)
 
 func AuthGithub(client github.Client, io cout.IO) (string, error) {
 	token := config.GetToken()
 	if token == "" {
 		slog.Debug("no token found locally, starting authentication")
 		var err error
-		token, err = client.Authenticate(githubClientID, io)
+
+		if githubClientSecret == "" {
+			slog.Debug("client secret not available, using device code flow")
+			token, err = client.CodeBasedAuthentication(githubClientID, io)
+		} else {
+			slog.Debug("client secret available, using PKCE flow")
+			token, err = client.PKCEAuthentication(githubClientID, githubClientSecret, io)
+		}
+
 		if err != nil {
 			return "", fmt.Errorf("authentication failed: %w", err)
 		}

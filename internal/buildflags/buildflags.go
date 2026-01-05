@@ -17,8 +17,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package buildflags
 
 var (
-	Env     = "prod"
-	Version = "0.0.1"
+	Env       = "prod"
+	Version   = "0.0.1"
+	Commit    = "unknown"
+	BuildTime = "unknown"
 )
 
 func IsDev() bool {
