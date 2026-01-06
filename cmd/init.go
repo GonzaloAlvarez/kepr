@@ -58,6 +58,10 @@ func NewInitCmd(app *App) *cobra.Command {
 
 			app.UI.Successfln("Created private remote repository: github.com/%s", repo)
 
+			if err := config.SaveGitHubRepo(repo); err != nil {
+				return fmt.Errorf("failed to save repository configuration: %w", err)
+			}
+
 			if err := initialize.UserInfo(app.GitHub, app.UI); err != nil {
 				return err
 			}

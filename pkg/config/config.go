@@ -155,6 +155,15 @@ func GetYubikeySerial() string {
 	return viper.GetString("yubikey_serial")
 }
 
+func SaveGitHubRepo(repo string) error {
+	viper.Set("github_repo", repo)
+	return writeConfig()
+}
+
+func GetGitHubRepo() string {
+	return viper.GetString("github_repo")
+}
+
 func writeConfig() error {
 	dir, err := Dir()
 	if err != nil {
