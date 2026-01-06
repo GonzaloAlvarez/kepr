@@ -33,7 +33,7 @@ func NewInitCmd(app *App) *cobra.Command {
 		Short: "Initialize a new kepr repository",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			repo := args[0]
+			repo := github.NormalizeRepoPath(args[0])
 
 			token, err := initialize.AuthGithub(app.GitHub, app.UI)
 			if err != nil {

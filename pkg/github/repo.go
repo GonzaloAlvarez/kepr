@@ -40,6 +40,14 @@ func ExtractRepoOwner(fullPath string) string {
 	return ""
 }
 
+func NormalizeRepoPath(input string) string {
+	parts := strings.Split(input, "/")
+	if len(parts) >= 2 {
+		return input
+	}
+	return input + "/kepr-store"
+}
+
 func (c *GitHubClient) CheckRepoExists(name string) (bool, error) {
 	slog.Debug("checking if repository exists", "name", name)
 
