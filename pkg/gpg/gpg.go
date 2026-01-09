@@ -132,6 +132,22 @@ func (g *GPG) execute(stdin string, args ...string) (string, string, error) {
 	return stdoutBuf.String(), stderrBuf.String(), err
 }
 
+func (g *GPG) executeBytes(stdin []byte, args ...string) ([]byte, string, error) {
+	cmd := g.executor.Command(g.BinaryPath, args...)
+	cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir)))
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.SetStdout(&stdoutBuf)
+	cmd.SetStderr(&stderrBuf)
+
+	if len(stdin) > 0 {
+		cmd.SetStdin(bytes.NewBuffer(stdin))
+	}
+
+	err := cmd.Run()
+	return stdoutBuf.Bytes(), stderrBuf.String(), err
+}
+
 func (g *GPG) executeWithPinentry(stdin string, args ...string) (string, string, error) {
 	cmd := g.executor.Command(g.BinaryPath, args...)
 	cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir)))
