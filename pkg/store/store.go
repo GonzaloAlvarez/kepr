@@ -27,9 +27,11 @@ import (
 )
 
 var (
-	ErrAlreadyInitialized = errors.New("store already initialized")
-	ErrInvalidFingerprint = errors.New("fingerprint cannot be empty")
-	ErrInvalidGPGClient   = errors.New("gpg client cannot be nil")
+	ErrAlreadyInitialized  = errors.New("store already initialized")
+	ErrInvalidFingerprint  = errors.New("fingerprint cannot be empty")
+	ErrInvalidGPGClient    = errors.New("gpg client cannot be nil")
+	ErrSecretAlreadyExists = errors.New("secret already exists")
+	ErrStoreNotInitialized = errors.New("store not initialized")
 )
 
 type Store struct {
@@ -83,4 +85,80 @@ func (s *Store) Init() error {
 
 	slog.Debug("store initialized successfully")
 	return nil
+}
+
+func (s *Store) findOrCreateDirectory(parentDirPath string, dirName string) (string, error) {
+	slog.Debug("finding or creating directory", "parent", parentDirPath, "name", dirName)
+
+	entries, err := os.ReadDir(parentDirPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		uuid := entry.Name()
+		metadataPath := filepath.Join(parentDirPath, uuid, uuid+"_md.gpg")
+
+		metadataEncrypted, err := os.ReadFile(metadataPath)
+		if err != nil {
+			slog.Debug("failed to read metadata file, skipping", "path", metadataPath, "error", err)
+			continue
+		}
+
+		metadataDecrypted, err := s.gpg.Decrypt(metadataEncrypted)
+		if err != nil {
+			slog.Debug("failed to decrypt metadata, skipping", "path", metadataPath, "error", err)
+			continue
+		}
+
+		metadata, err := DeserializeMetadata(metadataDecrypted)
+		if err != nil {
+			slog.Debug("failed to deserialize metadata, skipping", "path", metadataPath, "error", err)
+			continue
+		}
+
+		if metadata.Path == dirName && metadata.Type == TypeDir {
+			slog.Debug("found existing directory", "uuid", uuid, "name", dirName)
+			return uuid, nil
+		}
+	}
+
+	slog.Debug("directory not found, creating new", "name", dirName)
+
+	uuid, err := GenerateUUID()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate UUID: %w", err)
+	}
+
+	dirPath := filepath.Join(parentDirPath, uuid)
+	if err := os.MkdirAll(dirPath, 0700); err != nil {
+		return "", fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	metadata := &Metadata{
+		Path: dirName,
+		Type: TypeDir,
+	}
+
+	metadataJSON, err := SerializeMetadata(metadata)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize metadata: %w", err)
+	}
+
+	metadataEncrypted, err := s.gpg.Encrypt(metadataJSON, s.Fingerprint)
+	if err != nil {
+		return "", fmt.Errorf("failed to encrypt metadata: %w", err)
+	}
+
+	metadataPath := filepath.Join(dirPath, uuid+"_md.gpg")
+	if err := os.WriteFile(metadataPath, metadataEncrypted, 0600); err != nil {
+		return "", fmt.Errorf("failed to write metadata file: %w", err)
+	}
+
+	slog.Debug("created new directory", "uuid", uuid, "name", dirName)
+	return uuid, nil
 }
