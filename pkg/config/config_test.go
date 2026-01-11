@@ -90,10 +90,10 @@ func TestEnsureConfigDir_Idempotent(t *testing.T) {
 	}
 }
 
-func TestCheckDependencies_AllPresent(t *testing.T) {
+func TestCheckDependencies(t *testing.T) {
 	err := CheckDependencies()
 	if err != nil {
-		t.Logf("CheckDependencies() returned error (may be expected if dependencies not installed): %v", err)
+		t.Logf("CheckDependencies() returned error (may be expected if gpg or git not installed): %v", err)
 	}
 }
 

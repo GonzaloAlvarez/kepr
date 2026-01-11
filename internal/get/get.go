@@ -57,29 +57,23 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 		return fmt.Errorf("failed to pull from remote: %w", err)
 	}
 
-	gpgHome := filepath.Join(configDir, "gpg")
-	p := pass.New(configDir, gpgHome, executor)
+	g, err := gpg.New(configDir, executor, io)
+	if err != nil {
+		return fmt.Errorf("failed to initialize gpg: %w", err)
+	}
 
 	userPin := config.GetYubikeyUserPin()
 	if userPin != "" && userPin != "manual" {
-		g, err := gpg.New(configDir, executor, io)
-		if err != nil {
-			return fmt.Errorf("failed to initialize gpg: %w", err)
-		}
-
 		y := gpg.NewYubikey(g)
-		if err != nil {
-			return fmt.Errorf("failed to initialize yubikey: %w", err)
-		}
 
 		y.KillSCDaemon()
 
 		if y.CheckCardPresent() != nil {
 			return fmt.Errorf("no yubikey detected")
 		}
-
-		return p.Get(key, &userPin)
 	}
 
-	return p.Get(key, nil)
+	p := pass.New(configDir, g, io, executor)
+
+	return p.Get(key)
 }

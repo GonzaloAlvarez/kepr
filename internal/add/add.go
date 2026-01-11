@@ -24,6 +24,7 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/git"
 	"github.com/gonzaloalvarez/kepr/pkg/github"
+	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/pass"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
@@ -44,8 +45,12 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 		return fmt.Errorf("failed to get config directory: %w", err)
 	}
 
-	gpgHome := filepath.Join(configDir, "gpg")
-	p := pass.New(configDir, gpgHome, executor)
+	g, err := gpg.New(configDir, executor, io)
+	if err != nil {
+		return fmt.Errorf("failed to initialize gpg: %w", err)
+	}
+
+	p := pass.New(configDir, g, io, executor)
 
 	if err := p.Add(key); err != nil {
 		return err

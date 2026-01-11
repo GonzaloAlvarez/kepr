@@ -21,14 +21,15 @@ import (
 	"log/slog"
 
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
+	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/pass"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func SetupPasswordStore(configDir, gpgHome, fingerprint string, executor shell.Executor, io cout.IO) error {
+func SetupPasswordStore(configDir string, g *gpg.GPG, fingerprint string, executor shell.Executor, io cout.IO) error {
 	slog.Debug("initializing password store")
 
-	p := pass.New(configDir, gpgHome, executor)
+	p := pass.New(configDir, g, io, executor)
 
 	if err := p.Init(fingerprint); err != nil {
 		return fmt.Errorf("failed to initialize password store: %w", err)

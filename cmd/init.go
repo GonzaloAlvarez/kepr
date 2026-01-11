@@ -66,7 +66,8 @@ func NewInitCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			if err := initialize.SetupGPG(app.Shell, app.UI); err != nil {
+			g, err := initialize.SetupGPG(app.Shell, app.UI)
+			if err != nil {
 				return err
 			}
 
@@ -75,10 +76,9 @@ func NewInitCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			gpgHome := configDir + "/gpg"
 			fingerprint := config.GetUserFingerprint()
 
-			if err := initialize.SetupPasswordStore(configDir, gpgHome, fingerprint, app.Shell, app.UI); err != nil {
+			if err := initialize.SetupPasswordStore(configDir, g, fingerprint, app.Shell, app.UI); err != nil {
 				return err
 			}
 

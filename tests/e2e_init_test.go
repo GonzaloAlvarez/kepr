@@ -31,7 +31,6 @@ func TestInit_HappyPath(t *testing.T) {
 
 	mockShell.AddResponse("gpg", []string{"--version"}, "gpg (GnuPG) 2.4.0", "", nil)
 	mockShell.AddResponse("git", []string{"--version"}, "git version 2.39.0", "", nil)
-	mockShell.AddResponse("gopass", []string{"--version"}, "gopass 1.15.0", "", nil)
 
 	mockShell.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
 	mockShell.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
