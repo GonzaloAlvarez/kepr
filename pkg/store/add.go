@@ -21,7 +21,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 )
@@ -60,48 +59,9 @@ func (s *Store) Add(path string, io cout.IO) error {
 
 	slog.Debug("checking if secret already exists", "path", currentPath, "name", secretName)
 
-	entries, err := os.ReadDir(currentPath)
-	if err != nil {
-		return fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		fileName := entry.Name()
-		if !strings.HasSuffix(fileName, "_md.gpg") {
-			continue
-		}
-
-		uuid := strings.TrimSuffix(fileName, "_md.gpg")
-		if strings.Contains(uuid, "_") {
-			continue
-		}
-
-		metadataPath := filepath.Join(currentPath, fileName)
-		metadataEncrypted, err := os.ReadFile(metadataPath)
-		if err != nil {
-			slog.Debug("failed to read metadata file, skipping", "path", metadataPath, "error", err)
-			continue
-		}
-
-		metadataDecrypted, err := s.gpg.Decrypt(metadataEncrypted)
-		if err != nil {
-			slog.Debug("failed to decrypt metadata, skipping", "path", metadataPath, "error", err)
-			continue
-		}
-
-		metadata, err := DeserializeMetadata(metadataDecrypted)
-		if err != nil {
-			slog.Debug("failed to deserialize metadata, skipping", "path", metadataPath, "error", err)
-			continue
-		}
-
-		if metadata.Path == secretName && metadata.Type == TypePassword {
-			return ErrSecretAlreadyExists
-		}
+	_, err = s.findSecret(currentPath, secretName)
+	if err == nil {
+		return ErrSecretAlreadyExists
 	}
 
 	slog.Debug("reading secret value from user")
@@ -152,4 +112,3 @@ func (s *Store) Add(path string, io cout.IO) error {
 	slog.Debug("secret added successfully", "path", normalizedPath, "uuid", uuid)
 	return nil
 }
-

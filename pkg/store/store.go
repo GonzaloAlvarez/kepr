@@ -32,6 +32,7 @@ var (
 	ErrInvalidGPGClient    = errors.New("gpg client cannot be nil")
 	ErrSecretAlreadyExists = errors.New("secret already exists")
 	ErrStoreNotInitialized = errors.New("store not initialized")
+	ErrSecretNotFound      = errors.New("secret not found")
 )
 
 type Store struct {
@@ -90,46 +91,14 @@ func (s *Store) Init() error {
 func (s *Store) findOrCreateDirectory(parentDirPath string, dirName string) (string, error) {
 	slog.Debug("finding or creating directory", "parent", parentDirPath, "name", dirName)
 
-	entries, err := os.ReadDir(parentDirPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		uuid := entry.Name()
-		metadataPath := filepath.Join(parentDirPath, uuid, uuid+"_md.gpg")
-
-		metadataEncrypted, err := os.ReadFile(metadataPath)
-		if err != nil {
-			slog.Debug("failed to read metadata file, skipping", "path", metadataPath, "error", err)
-			continue
-		}
-
-		metadataDecrypted, err := s.gpg.Decrypt(metadataEncrypted)
-		if err != nil {
-			slog.Debug("failed to decrypt metadata, skipping", "path", metadataPath, "error", err)
-			continue
-		}
-
-		metadata, err := DeserializeMetadata(metadataDecrypted)
-		if err != nil {
-			slog.Debug("failed to deserialize metadata, skipping", "path", metadataPath, "error", err)
-			continue
-		}
-
-		if metadata.Path == dirName && metadata.Type == TypeDir {
-			slog.Debug("found existing directory", "uuid", uuid, "name", dirName)
-			return uuid, nil
-		}
+	uuid, err := s.findDirectory(parentDirPath, dirName)
+	if err == nil {
+		return uuid, nil
 	}
 
 	slog.Debug("directory not found, creating new", "name", dirName)
 
-	uuid, err := GenerateUUID()
+	uuid, err = GenerateUUID()
 	if err != nil {
 		return "", fmt.Errorf("failed to generate UUID: %w", err)
 	}
