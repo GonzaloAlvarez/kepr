@@ -44,14 +44,14 @@ func SetupPasswordStore(configDir string, g *gpg.GPG, fingerprint string, execut
 		return fmt.Errorf("failed to initialize git client: %w", err)
 	}
 
-	if err := gitClient.Init(secretsPath); err != nil {
-		return fmt.Errorf("failed to initialize git repository: %w", err)
-	}
-
 	p := pass.New(configDir, g, gitClient, io, executor, st)
 
 	if err := p.Init(fingerprint); err != nil {
 		return fmt.Errorf("failed to initialize password store: %w", err)
+	}
+
+	if err := gitClient.Init(secretsPath); err != nil {
+		return fmt.Errorf("failed to initialize git repository: %w", err)
 	}
 
 	io.Successfln("Initialized local secret store at %s", p.SecretsPath)
