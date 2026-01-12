@@ -22,7 +22,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
+	"github.com/gonzaloalvarez/kepr/pkg/git"
 	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 	"github.com/gonzaloalvarez/kepr/pkg/store"
@@ -32,14 +34,17 @@ type Pass struct {
 	SecretsPath string
 	gpg         *gpg.GPG
 	store       *store.Store
+	git         *git.Git
 	io          cout.IO
 	executor    shell.Executor
 }
 
-func New(configDir string, gpgClient *gpg.GPG, io cout.IO, executor shell.Executor) *Pass {
+func New(configDir string, gpgClient *gpg.GPG, gitClient *git.Git, io cout.IO, executor shell.Executor, st *store.Store) *Pass {
 	return &Pass{
 		SecretsPath: filepath.Join(configDir, "secrets"),
 		gpg:         gpgClient,
+		git:         gitClient,
+		store:       st,
 		io:          io,
 		executor:    executor,
 	}
@@ -47,13 +52,6 @@ func New(configDir string, gpgClient *gpg.GPG, io cout.IO, executor shell.Execut
 
 func (p *Pass) Init(fingerprint string) error {
 	slog.Debug("initializing password store", "path", p.SecretsPath, "fingerprint", fingerprint)
-
-	st, err := store.New(p.SecretsPath, fingerprint, p.gpg)
-	if err != nil {
-		return fmt.Errorf("failed to create store: %w", err)
-	}
-
-	p.store = st
 
 	if err := p.store.Init(); err != nil {
 		return fmt.Errorf("failed to initialize store: %w", err)
@@ -66,8 +64,16 @@ func (p *Pass) Init(fingerprint string) error {
 func (p *Pass) Add(key string) error {
 	slog.Debug("adding secret to password store", "key", key)
 
-	if err := p.store.Add(key, p.io); err != nil {
+	uuid, err := p.store.Add(key, p.io)
+	if err != nil {
 		return fmt.Errorf("failed to add secret: %w", err)
+	}
+
+	userName := config.GetUserName()
+	userEmail := config.GetUserEmail()
+
+	if err := p.git.Commit(p.SecretsPath, "updated store with new UUID "+uuid, userName, userEmail); err != nil {
+		return fmt.Errorf("failed to commit changes: %w", err)
 	}
 
 	slog.Debug("secret added successfully")

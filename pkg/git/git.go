@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
@@ -99,5 +100,71 @@ func (g *Git) Push(repoPath, remoteName, branch string) error {
 	}
 
 	slog.Debug("successfully pushed to remote")
+	return nil
+}
+
+func (g *Git) Init(repoPath string) error {
+	slog.Debug("initializing git repository", "path", repoPath)
+
+	cmd := g.executor.Command(g.BinaryPath, "init", "-b", "main")
+	cmd.SetDir(repoPath)
+
+	var stderrBuf bytes.Buffer
+	cmd.SetStderr(&stderrBuf)
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to initialize git repository: %w, stderr: %s", err, stderrBuf.String())
+	}
+
+	slog.Debug("git repository initialized")
+	return nil
+}
+
+func (g *Git) Commit(repoPath, message, authorName, authorEmail string) error {
+	slog.Debug("committing changes", "path", repoPath, "message", message)
+
+	statusCmd := g.executor.Command(g.BinaryPath, "status", "--porcelain")
+	statusCmd.SetDir(repoPath)
+
+	var statusOut bytes.Buffer
+	statusCmd.SetStdout(&statusOut)
+
+	if err := statusCmd.Run(); err != nil {
+		return fmt.Errorf("failed to check git status: %w", err)
+	}
+
+	if statusOut.Len() == 0 {
+		slog.Debug("no changes to commit")
+		return nil
+	}
+
+	addCmd := g.executor.Command(g.BinaryPath, "add", "-A", ".")
+	addCmd.SetDir(repoPath)
+
+	var addStderr bytes.Buffer
+	addCmd.SetStderr(&addStderr)
+
+	if err := addCmd.Run(); err != nil {
+		return fmt.Errorf("failed to stage changes: %w, stderr: %s", err, addStderr.String())
+	}
+
+	commitCmd := g.executor.Command(g.BinaryPath, "commit", "-m", message)
+	commitCmd.SetDir(repoPath)
+	commitCmd.SetEnv(append(
+		os.Environ(),
+		fmt.Sprintf("GIT_AUTHOR_NAME=%s", authorName),
+		fmt.Sprintf("GIT_AUTHOR_EMAIL=%s", authorEmail),
+		fmt.Sprintf("GIT_COMMITTER_NAME=%s", authorName),
+		fmt.Sprintf("GIT_COMMITTER_EMAIL=%s", authorEmail),
+	))
+
+	var commitStderr bytes.Buffer
+	commitCmd.SetStderr(&commitStderr)
+
+	if err := commitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit: %w, stderr: %s", err, commitStderr.String())
+	}
+
+	slog.Debug("changes committed successfully")
 	return nil
 }
