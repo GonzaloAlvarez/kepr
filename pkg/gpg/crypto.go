@@ -19,6 +19,8 @@ package gpg
 import (
 	"fmt"
 	"log/slog"
+
+	"github.com/gonzaloalvarez/kepr/pkg/config"
 )
 
 func (g *GPG) Encrypt(data []byte, recipient string) ([]byte, error) {
@@ -45,12 +47,33 @@ func (g *GPG) Encrypt(data []byte, recipient string) ([]byte, error) {
 func (g *GPG) Decrypt(data []byte) ([]byte, error) {
 	slog.Debug("decrypting data", "size", len(data))
 
-	args := []string{
-		"--decrypt",
-		"--batch",
+	userPin := config.GetYubikeyUserPin()
+
+	if userPin != "" && userPin != "manual" {
+		slog.Debug("using automated decryption with loopback pinentry")
+		args := []string{
+			"--decrypt",
+			"--batch",
+			"--pinentry-mode", "loopback",
+			"--passphrase", userPin,
+		}
+
+		stdout, stderr, err := g.executeBytes(data, args...)
+		if err != nil {
+			slog.Debug("decryption failed", "error", err, "stderr", stderr)
+			return nil, fmt.Errorf("failed to decrypt data: %w", err)
+		}
+
+		slog.Debug("decryption successful", "output_size", len(stdout))
+		return stdout, nil
 	}
 
-	stdout, stderr, err := g.executeBytes(data, args...)
+	slog.Debug("using interactive pinentry for decryption")
+	args := []string{
+		"--decrypt",
+	}
+
+	stdout, stderr, err := g.executeBytesWithPinentry(data, args...)
 	if err != nil {
 		slog.Debug("decryption failed", "error", err, "stderr", stderr)
 		return nil, fmt.Errorf("failed to decrypt data: %w", err)
