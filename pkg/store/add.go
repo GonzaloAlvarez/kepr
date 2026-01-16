@@ -65,7 +65,7 @@ func (s *Store) Add(path string, io cout.IO) (string, error) {
 	}
 
 	slog.Debug("reading secret value from user")
-	secretValue, err := io.Input("Enter secret for "+normalizedPath+": ", "")
+	secretValue, err := io.InputPassword("Enter secret for " + normalizedPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read secret value: %w", err)
 	}

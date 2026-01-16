@@ -42,6 +42,16 @@ func (m *MockUI) Input(prompt string, defaultValue string) (string, error) {
 	return result, nil
 }
 
+func (m *MockUI) InputPassword(prompt string) (string, error) {
+	m.Output.WriteString(fmt.Sprintf("InputPassword: %s\n", prompt))
+	if m.textIndex >= len(m.TextInputs) {
+		return "", fmt.Errorf("mock: no more text inputs available")
+	}
+	result := m.TextInputs[m.textIndex]
+	m.textIndex++
+	return result, nil
+}
+
 func (m *MockUI) Info(a ...interface{}) {
 	m.Output.WriteString(fmt.Sprint(a...))
 }
