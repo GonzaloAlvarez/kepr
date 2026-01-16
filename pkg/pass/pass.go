@@ -17,28 +17,35 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package pass
 
 import (
-	"bytes"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
+	"github.com/gonzaloalvarez/kepr/pkg/cout"
+	"github.com/gonzaloalvarez/kepr/pkg/git"
+	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
+	"github.com/gonzaloalvarez/kepr/pkg/store"
 )
 
 type Pass struct {
 	SecretsPath string
-	GpgHome     string
-	GopassHome  string
+	gpg         *gpg.GPG
+	store       *store.Store
+	git         *git.Git
+	io          cout.IO
 	executor    shell.Executor
 }
 
-func New(configDir, gpgHome string, executor shell.Executor) *Pass {
+func New(configDir string, gpgClient *gpg.GPG, gitClient *git.Git, io cout.IO, executor shell.Executor, st *store.Store) *Pass {
 	return &Pass{
 		SecretsPath: filepath.Join(configDir, "secrets"),
-		GpgHome:     gpgHome,
-		GopassHome:  filepath.Join(configDir, "gopass"),
+		gpg:         gpgClient,
+		git:         gitClient,
+		store:       st,
+		io:          io,
 		executor:    executor,
 	}
 }
@@ -46,124 +53,43 @@ func New(configDir, gpgHome string, executor shell.Executor) *Pass {
 func (p *Pass) Init(fingerprint string) error {
 	slog.Debug("initializing password store", "path", p.SecretsPath, "fingerprint", fingerprint)
 
-	if err := os.MkdirAll(p.SecretsPath, 0700); err != nil {
-		return fmt.Errorf("failed to create secrets directory: %w", err)
-	}
-
-	gopassPath, err := p.executor.LookPath("gopass")
-	if err != nil {
-		return fmt.Errorf("gopass binary not found: %w", err)
-	}
-
-	slog.Debug("found gopass binary", "path", gopassPath)
-
-	userName := config.GetUserName()
-	userEmail := config.GetUserEmail()
-
-	cmd := p.executor.Command(gopassPath, "init", "--path", p.SecretsPath, "--crypto", "gpg", fingerprint)
-	cmd.SetEnv(append(os.Environ(),
-		fmt.Sprintf("GOPASS_HOMEDIR=%s", p.GopassHome),
-		fmt.Sprintf("GNUPGHOME=%s", p.GpgHome),
-		fmt.Sprintf("GIT_AUTHOR_NAME=%s", userName),
-		fmt.Sprintf("GIT_AUTHOR_EMAIL=%s", userEmail),
-	))
-
-	var stderr bytes.Buffer
-	cmd.SetStdout(os.Stdout)
-	cmd.SetStderr(&stderr)
-
-	slog.Debug("executing gopass init", "git_author_name", userName, "git_author_email", userEmail)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("gopass init failed: %w, stderr: %s", err, stderr.String())
-	}
-
-	slog.Debug("gopass init successful")
-
-	if err := p.writeGitignore(); err != nil {
-		return fmt.Errorf("failed to write .gitignore: %w", err)
+	if err := p.store.Init(); err != nil {
+		return fmt.Errorf("failed to initialize store: %w", err)
 	}
 
 	slog.Debug("password store initialized successfully")
 	return nil
 }
 
-func (p *Pass) writeGitignore() error {
-	gitignorePath := filepath.Join(p.SecretsPath, ".gitignore")
-	content := `*
-!*/
-!**/*.gpg
-!.gpg-id
-`
-
-	slog.Debug("writing .gitignore", "path", gitignorePath)
-	if err := os.WriteFile(gitignorePath, []byte(content), 0600); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (p *Pass) Add(key string) error {
 	slog.Debug("adding secret to password store", "key", key)
 
-	gopassPath, err := p.executor.LookPath("gopass")
+	uuid, err := p.store.Add(key, p.io)
 	if err != nil {
-		return fmt.Errorf("gopass binary not found: %w", err)
+		return fmt.Errorf("failed to add secret: %w", err)
 	}
 
 	userName := config.GetUserName()
 	userEmail := config.GetUserEmail()
 
-	cmd := p.executor.Command(gopassPath, "insert", key)
-	cmd.SetEnv(append(os.Environ(),
-		fmt.Sprintf("GOPASS_HOMEDIR=%s", p.GopassHome),
-		fmt.Sprintf("GNUPGHOME=%s", p.GpgHome),
-		fmt.Sprintf("PASSWORD_STORE_DIR=%s", p.SecretsPath),
-		fmt.Sprintf("GIT_AUTHOR_NAME=%s", userName),
-		fmt.Sprintf("GIT_AUTHOR_EMAIL=%s", userEmail),
-	))
-
-	cmd.SetStdin(os.Stdin)
-	cmd.SetStdout(os.Stdout)
-	cmd.SetStderr(os.Stderr)
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("gopass insert failed: %w", err)
+	if err := p.git.Commit(p.SecretsPath, "updated store with new UUID "+uuid, userName, userEmail); err != nil {
+		return fmt.Errorf("failed to commit changes: %w", err)
 	}
 
 	slog.Debug("secret added successfully")
 	return nil
 }
 
-func (p *Pass) Get(key string, userPin *string) error {
+func (p *Pass) Get(key string) error {
 	slog.Debug("getting secret from password store", "key", key)
 
-	gopassPath, err := p.executor.LookPath("gopass")
+	secretBytes, err := p.store.Get(key)
 	if err != nil {
-		return fmt.Errorf("gopass binary not found: %w", err)
+		return fmt.Errorf("failed to get secret: %w", err)
 	}
 
-	cmd := p.executor.Command(gopassPath, "show", "--password", key)
-
-	env := append(os.Environ(),
-		fmt.Sprintf("GOPASS_HOMEDIR=%s", p.GopassHome),
-		fmt.Sprintf("GNUPGHOME=%s", p.GpgHome),
-		fmt.Sprintf("PASSWORD_STORE_DIR=%s", p.SecretsPath),
-	)
-
-	if userPin != nil {
-		gpgOpts := fmt.Sprintf("--pinentry-mode loopback --no-tty --quiet --display-charset utf-8 --batch --passphrase %s", *userPin)
-		env = append(env, fmt.Sprintf("GOPASS_GPG_OPTS=%s", gpgOpts))
-	}
-
-	cmd.SetEnv(env)
-
-	cmd.SetStdin(os.Stdin)
-	cmd.SetStdout(os.Stdout)
-	cmd.SetStderr(os.Stderr)
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("gopass show failed: %w", err)
+	if _, err := os.Stdout.Write(secretBytes); err != nil {
+		return fmt.Errorf("failed to write secret to stdout: %w", err)
 	}
 
 	slog.Debug("secret retrieved successfully")

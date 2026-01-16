@@ -4,7 +4,7 @@
 
 # kepr
 
-**kepr** (Key Encrypted Private Ring) is an opinionated, serverless, and secure command-line secret manager. It serves as an orchestrator for industry-standard tools—`gpg`, `gopass`, and `git`—to provide a seamless experience for managing encrypted secrets backed by hardware security modules (YubiKeys).
+**kepr** (Key Encrypted Private Ring) is an opinionated, serverless, and secure command-line secret manager. It uses industry-standard tools—`gpg` and `git`—to provide a seamless experience for managing encrypted secrets backed by hardware security modules (YubiKeys).
 
 ## Motivation
 
@@ -15,14 +15,14 @@ Managing secrets securely across teams and remote systems often requires setting
 2.  **Hardware Enforced:** Decryption keys are generated on or moved to a YubiKey. If you don't have the physical token, you can't access the secrets.
 3.  **Git-Native:** History, versioning, and rollback of secrets come for free via Git.
 4.  **Remote Friendly:** It solves the "Bootstrapping Trust" problem for CI/CD and remote servers using a GitOps-style request/approval workflow.
-5.  **Orchestration:** It does not roll its own crypto. It automates the complex configuration of GnuPG and `gopass`, providing a "porcelain" interface over the underlying plumbing.
+5.  **Orchestration:** It does not roll its own crypto. It automates the complex configuration of GnuPG, providing a "porcelain" interface over the underlying plumbing.
 
 ## Prerequisites
 
 *   **OS:** Linux or macOS
 *   **Hardware:** A YubiKey (Series 5 or compatible)
 *   **Account:** A GitHub account
-*   **Dependencies:** `gpg` (v2.2+), `git`, `gopass`
+*   **Dependencies:** `gpg` (v2.2+), `git`
 
 ## Installation
 
@@ -32,7 +32,7 @@ go install github.com/gonzaloalvarez/kepr@latest
 
 # Ensure dependencies are in your path
 # kepr will verify these during the first run
-which gpg git gopass
+which gpg git
 ```
 
 ### Building from Source

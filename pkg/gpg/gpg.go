@@ -132,6 +132,22 @@ func (g *GPG) execute(stdin string, args ...string) (string, string, error) {
 	return stdoutBuf.String(), stderrBuf.String(), err
 }
 
+func (g *GPG) executeBytes(stdin []byte, args ...string) ([]byte, string, error) {
+	cmd := g.executor.Command(g.BinaryPath, args...)
+	cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir)))
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.SetStdout(&stdoutBuf)
+	cmd.SetStderr(&stderrBuf)
+
+	if len(stdin) > 0 {
+		cmd.SetStdin(bytes.NewBuffer(stdin))
+	}
+
+	err := cmd.Run()
+	return stdoutBuf.Bytes(), stderrBuf.String(), err
+}
+
 func (g *GPG) executeWithPinentry(stdin string, args ...string) (string, string, error) {
 	cmd := g.executor.Command(g.BinaryPath, args...)
 	cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir)))
@@ -176,6 +192,52 @@ func (g *GPG) executeWithPinentry(stdin string, args ...string) (string, string,
 	}
 
 	return stdoutBuf.String(), stderrBuf.String(), err
+}
+
+func (g *GPG) executeBytesWithPinentry(stdin []byte, args ...string) ([]byte, string, error) {
+	cmd := g.executor.Command(g.BinaryPath, args...)
+	cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GNUPGHOME=%s", g.HomeDir)))
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create pipe: %w", err)
+	}
+	defer pr.Close()
+
+	tty := cmd.GetEnv("GPG_TTY")
+	if tty == "" {
+		if out, err := exec.Command("tty").Output(); err == nil {
+			tty = strings.TrimSpace(string(out))
+		}
+	}
+
+	if tty != "" {
+		cmd.SetEnv(append(os.Environ(), fmt.Sprintf("GPG_TTY=%s", tty)))
+	}
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.SetStdout(&stdoutBuf)
+	cmd.SetStderr(&stderrBuf)
+
+	cmd.SetExtraFiles([]*os.File{pr})
+	cmd.SetStdin(os.Stdin)
+
+	err = cmd.Start()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to start command: %w", err)
+	}
+
+	go func() {
+		pw.Write(stdin)
+		pw.Close()
+	}()
+
+	err = cmd.Wait()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to wait for command: %w", err)
+	}
+
+	return stdoutBuf.Bytes(), stderrBuf.String(), err
 }
 
 func (g *GPG) ExecuteInteractive(args ...string) (*GPGSession, error) {

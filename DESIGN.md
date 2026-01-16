@@ -9,7 +9,7 @@
     *   Identity Discovery (User Name/Email).
     *   Disaster Recovery (Encrypted Identity Backup).
     *   Data Synchronization (Git Repositories).
-3.  **No "Rolled" Crypto:** `kepr` does not implement encryption primitives. It delegates all cryptographic operations to GnuPG and all secret management logic to `gopass`.
+3.  **No "Rolled" Crypto:** `kepr` does not implement encryption primitives. It delegates all cryptographic operations to GnuPG, using a custom UUID-based encrypted storage system.
 4.  **Isolation:** `kepr` maintains its own state in `~/.kepr`, ensuring it does not conflict with the user's existing `~/.gnupg` or git configurations.
 
 ## 3. System Architecture
@@ -20,10 +20,10 @@
 *   **Application State (`~/.kepr/`)**
     *   `config.json`: Local configuration (Current user fingerprint, path to data repo, GitHub tokens).
     *   `gpg/`: A custom GnuPG home directory. Contains keyrings and `gpg-agent.conf`.
-*   **Data Storage (`./my-secrets/` or user defined)**
-    *   Standard `gopass` directory structure.
+*   **Data Storage (`~/.kepr/secrets/`)**
+    *   UUID-based directory structure where each secret and directory has a unique identifier.
     *   `.git/`: The git repository tracking changes.
-    *   `.gpg-id`: The list of authorized public keys (recipients) for the directory.
+    *   `.gpg.id`: The GPG key fingerprint authorized for decryption.
 
 ### 3.2 Identity & Key Management
 `kepr` enforces a strict **Master Key vs. Subkey** architecture to ensure long-term identity security.
@@ -50,7 +50,7 @@ Servers (e.g., EC2, Kubernetes workers) cannot use YubiKeys. `kepr` implements a
 *   **CLI Framework:** Cobra
 *   **Git Interface:** `os/exec` (wrapping system git)
 *   **GPG Interface:** `os/exec` (wrapping system gpg 2.2+)
-*   **Secret Management Engine:** `os/exec` (wrapping gopass)
+*   **Secret Management Engine:** Custom UUID-based encrypted store (`pkg/store`)
 *   **GitHub API:** `google/go-github` (OAuth Device Flow)
 
 ## 5. Security Considerations

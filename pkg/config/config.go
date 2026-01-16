@@ -72,7 +72,7 @@ func InitViper() error {
 }
 
 func CheckDependencies() error {
-	dependencies := []string{"gpg", "git", "gopass"}
+	dependencies := []string{"gpg", "git"}
 	for _, tool := range dependencies {
 		if _, err := exec.LookPath(tool); err != nil {
 			return fmt.Errorf("missing dependency: %s is not installed or in PATH", tool)

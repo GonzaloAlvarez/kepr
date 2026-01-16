@@ -26,6 +26,7 @@ import (
 type IO interface {
 	Confirm(prompt string) (bool, error)
 	Input(prompt string, defaultValue string) (string, error)
+	InputPassword(prompt string) (string, error)
 	Info(a ...interface{})
 	Infoln(a ...interface{})
 	Infof(format string, a ...interface{})
@@ -63,6 +64,40 @@ func (t *Terminal) Input(prompt string, defaultValue string) (string, error) {
 	}
 	slog.Debug("cout: input result", "result", result)
 	return result, nil
+}
+
+func (t *Terminal) InputPassword(prompt string) (string, error) {
+	slog.Debug("cout: password input prompt", "message", prompt)
+
+	maxAttempts := 5
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		password1, err := pterm.DefaultInteractiveTextInput.WithMask("*").Show(prompt)
+		if err != nil {
+			slog.Error("password input failed", "error", err)
+			return "", err
+		}
+
+		if password1 == "" {
+			return "", fmt.Errorf("password cannot be empty")
+		}
+
+		password2, err := pterm.DefaultInteractiveTextInput.WithMask("*").Show("Confirm " + prompt)
+		if err != nil {
+			slog.Error("password confirmation failed", "error", err)
+			return "", err
+		}
+
+		if password1 == password2 {
+			slog.Debug("cout: password input successful")
+			return password1, nil
+		}
+
+		if attempt < maxAttempts {
+			pterm.Warning.Println("Passwords do not match. Please try again.")
+		}
+	}
+
+	return "", fmt.Errorf("passwords do not match after %d attempts", maxAttempts)
 }
 
 func (t *Terminal) Info(a ...interface{}) {

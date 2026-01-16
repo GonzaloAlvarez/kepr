@@ -28,19 +28,19 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func SetupGPG(executor shell.Executor, io cout.IO) error {
+func SetupGPG(executor shell.Executor, io cout.IO) (*gpg.GPG, error) {
 	configDir, err := config.Dir()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	g, err := gpg.New(configDir, executor, io)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := g.WriteConfigs(); err != nil {
-		return fmt.Errorf("failed to write GPG configs: %w", err)
+		return nil, fmt.Errorf("failed to write GPG configs: %w", err)
 	}
 
 	io.Successfln("GPG environment initialized at %s", g.HomeDir)
@@ -52,26 +52,26 @@ func SetupGPG(executor shell.Executor, io cout.IO) error {
 		userEmail := config.GetUserEmail()
 
 		if userName == "" || userEmail == "" {
-			return fmt.Errorf("user identity not configured")
+			return nil, fmt.Errorf("user identity not configured")
 		}
 
 		fingerprint, err = g.GenerateKeys(userName, userEmail)
 		if err != nil {
-			return fmt.Errorf("failed to generate keys: %w", err)
+			return nil, fmt.Errorf("failed to generate keys: %w", err)
 		}
 
 		io.Successfln("Generated Identity: %s", fingerprint)
 
 		if err := config.SaveFingerprint(fingerprint); err != nil {
-			return fmt.Errorf("failed to save fingerprint: %w", err)
+			return nil, fmt.Errorf("failed to save fingerprint: %w", err)
 		}
 
 		if err := g.BackupMasterKey(fingerprint); err != nil {
-			return fmt.Errorf("failed to process master key: %w", err)
+			return nil, fmt.Errorf("failed to process master key: %w", err)
 		}
 
 		if err := initYubikey(g, io); err != nil {
-			return err
+			return nil, err
 		}
 
 	} else {
@@ -79,7 +79,7 @@ func SetupGPG(executor shell.Executor, io cout.IO) error {
 		io.Infofln("Using existing GPG key: %s", fingerprint)
 	}
 
-	return nil
+	return g, nil
 }
 
 func initYubikey(g *gpg.GPG, io cout.IO) error {

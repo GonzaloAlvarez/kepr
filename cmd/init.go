@@ -66,7 +66,8 @@ func NewInitCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			if err := initialize.SetupGPG(app.Shell, app.UI); err != nil {
+			g, err := initialize.SetupGPG(app.Shell, app.UI)
+			if err != nil {
 				return err
 			}
 
@@ -75,21 +76,28 @@ func NewInitCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			gpgHome := configDir + "/gpg"
 			fingerprint := config.GetUserFingerprint()
 
-			if err := initialize.SetupPasswordStore(configDir, gpgHome, fingerprint, app.Shell, app.UI); err != nil {
+			if err := initialize.SetupPasswordStore(configDir, g, fingerprint, app.Shell, app.UI); err != nil {
 				return err
 			}
 
 			secretsPath := filepath.Join(configDir, "secrets")
-			repoOwner := github.ExtractRepoOwner(repo)
-			remoteURL := fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", token, repoOwner, repoName)
+
+			userName := config.GetUserName()
+			userEmail := config.GetUserEmail()
 
 			gitClient, err := git.New(app.Shell)
 			if err != nil {
 				return fmt.Errorf("failed to initialize git client: %w", err)
 			}
+
+			if err := gitClient.Commit(secretsPath, "initialized secret store", userName, userEmail); err != nil {
+				return fmt.Errorf("failed to commit initial store: %w", err)
+			}
+
+			repoOwner := github.ExtractRepoOwner(repo)
+			remoteURL := fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", token, repoOwner, repoName)
 
 			if err := gitClient.ConfigureRemote(secretsPath, "origin", remoteURL); err != nil {
 				return fmt.Errorf("failed to configure git remote: %w", err)
@@ -97,7 +105,7 @@ func NewInitCmd(app *App) *cobra.Command {
 
 			app.UI.Successfln("Configured git remote for repository")
 
-			if err := gitClient.Push(secretsPath, "origin", "master"); err != nil {
+			if err := gitClient.Push(secretsPath, "origin", "main"); err != nil {
 				return fmt.Errorf("failed to push to remote: %w", err)
 			}
 

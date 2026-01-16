@@ -19,19 +19,39 @@ package initialize
 import (
 	"fmt"
 	"log/slog"
+	"path/filepath"
 
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
+	"github.com/gonzaloalvarez/kepr/pkg/git"
+	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/pass"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
+	"github.com/gonzaloalvarez/kepr/pkg/store"
 )
 
-func SetupPasswordStore(configDir, gpgHome, fingerprint string, executor shell.Executor, io cout.IO) error {
+func SetupPasswordStore(configDir string, g *gpg.GPG, fingerprint string, executor shell.Executor, io cout.IO) error {
 	slog.Debug("initializing password store")
 
-	p := pass.New(configDir, gpgHome, executor)
+	secretsPath := filepath.Join(configDir, "secrets")
+
+	st, err := store.New(secretsPath, fingerprint, g)
+	if err != nil {
+		return fmt.Errorf("failed to create store: %w", err)
+	}
+
+	gitClient, err := git.New(executor)
+	if err != nil {
+		return fmt.Errorf("failed to initialize git client: %w", err)
+	}
+
+	p := pass.New(configDir, g, gitClient, io, executor, st)
 
 	if err := p.Init(fingerprint); err != nil {
 		return fmt.Errorf("failed to initialize password store: %w", err)
+	}
+
+	if err := gitClient.Init(secretsPath); err != nil {
+		return fmt.Errorf("failed to initialize git repository: %w", err)
 	}
 
 	io.Successfln("Initialized local secret store at %s", p.SecretsPath)

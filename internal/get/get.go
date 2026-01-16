@@ -28,6 +28,7 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/pass"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
+	"github.com/gonzaloalvarez/kepr/pkg/store"
 )
 
 func Execute(key string, githubClient github.Client, executor shell.Executor, io cout.IO) error {
@@ -47,39 +48,43 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 	}
 
 	secretsPath := filepath.Join(configDir, "secrets")
+	fingerprint := config.GetUserFingerprint()
+
+	if fingerprint == "" {
+		return fmt.Errorf("fingerprint not found: run 'kepr init' first")
+	}
 
 	gitClient, err := git.New(executor)
 	if err != nil {
 		return fmt.Errorf("failed to initialize git client: %w", err)
 	}
 
-	if err := gitClient.Pull(secretsPath, "origin", "master", true); err != nil {
+	if err := gitClient.Pull(secretsPath, "origin", "main", true); err != nil {
 		return fmt.Errorf("failed to pull from remote: %w", err)
 	}
 
-	gpgHome := filepath.Join(configDir, "gpg")
-	p := pass.New(configDir, gpgHome, executor)
+	g, err := gpg.New(configDir, executor, io)
+	if err != nil {
+		return fmt.Errorf("failed to initialize gpg: %w", err)
+	}
 
 	userPin := config.GetYubikeyUserPin()
 	if userPin != "" && userPin != "manual" {
-		g, err := gpg.New(configDir, executor, io)
-		if err != nil {
-			return fmt.Errorf("failed to initialize gpg: %w", err)
-		}
-
 		y := gpg.NewYubikey(g)
-		if err != nil {
-			return fmt.Errorf("failed to initialize yubikey: %w", err)
-		}
 
 		y.KillSCDaemon()
 
 		if y.CheckCardPresent() != nil {
 			return fmt.Errorf("no yubikey detected")
 		}
-
-		return p.Get(key, &userPin)
 	}
 
-	return p.Get(key, nil)
+	st, err := store.New(secretsPath, fingerprint, g)
+	if err != nil {
+		return fmt.Errorf("failed to create store: %w", err)
+	}
+
+	p := pass.New(configDir, g, nil, io, executor, st)
+
+	return p.Get(key)
 }

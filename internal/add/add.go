@@ -24,8 +24,10 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/git"
 	"github.com/gonzaloalvarez/kepr/pkg/github"
+	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/pass"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
+	"github.com/gonzaloalvarez/kepr/pkg/store"
 )
 
 func Execute(key string, githubClient github.Client, executor shell.Executor, io cout.IO) error {
@@ -44,8 +46,29 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 		return fmt.Errorf("failed to get config directory: %w", err)
 	}
 
-	gpgHome := filepath.Join(configDir, "gpg")
-	p := pass.New(configDir, gpgHome, executor)
+	secretsPath := filepath.Join(configDir, "secrets")
+	fingerprint := config.GetUserFingerprint()
+
+	if fingerprint == "" {
+		return fmt.Errorf("fingerprint not found: run 'kepr init' first")
+	}
+
+	g, err := gpg.New(configDir, executor, io)
+	if err != nil {
+		return fmt.Errorf("failed to initialize gpg: %w", err)
+	}
+
+	st, err := store.New(secretsPath, fingerprint, g)
+	if err != nil {
+		return fmt.Errorf("failed to create store: %w", err)
+	}
+
+	gitClient, err := git.New(executor)
+	if err != nil {
+		return fmt.Errorf("failed to initialize git client: %w", err)
+	}
+
+	p := pass.New(configDir, g, gitClient, io, executor, st)
 
 	if err := p.Add(key); err != nil {
 		return err
@@ -53,14 +76,7 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 
 	io.Successfln("Secret added: %s", key)
 
-	secretsPath := filepath.Join(configDir, "secrets")
-
-	gitClient, err := git.New(executor)
-	if err != nil {
-		return fmt.Errorf("failed to initialize git client: %w", err)
-	}
-
-	if err := gitClient.Push(secretsPath, "origin", "master"); err != nil {
+	if err := gitClient.Push(secretsPath, "origin", "main"); err != nil {
 		return fmt.Errorf("failed to push to remote: %w", err)
 	}
 
