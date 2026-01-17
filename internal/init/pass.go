@@ -39,10 +39,7 @@ func SetupPasswordStore(configDir string, g *gpg.GPG, fingerprint string, execut
 		return fmt.Errorf("failed to create store: %w", err)
 	}
 
-	gitClient, err := git.New(executor)
-	if err != nil {
-		return fmt.Errorf("failed to initialize git client: %w", err)
-	}
+	gitClient := git.New()
 
 	p := pass.New(configDir, g, gitClient, io, executor, st)
 
