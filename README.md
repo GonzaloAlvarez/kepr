@@ -22,7 +22,7 @@ Managing secrets securely across teams and remote systems often requires setting
 *   **OS:** Linux or macOS
 *   **Hardware:** A YubiKey (Series 5 or compatible)
 *   **Account:** A GitHub account
-*   **Dependencies:** `gpg` (v2.2+), `git`
+*   **Dependencies:** `gpg` (v2.2+)
 
 ## Installation
 
