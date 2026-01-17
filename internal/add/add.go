@@ -63,10 +63,7 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 		return fmt.Errorf("failed to create store: %w", err)
 	}
 
-	gitClient, err := git.New(executor)
-	if err != nil {
-		return fmt.Errorf("failed to initialize git client: %w", err)
-	}
+	gitClient := git.NewWithAuth(token)
 
 	p := pass.New(configDir, g, gitClient, io, executor, st)
 

@@ -87,17 +87,14 @@ func NewInitCmd(app *App) *cobra.Command {
 			userName := config.GetUserName()
 			userEmail := config.GetUserEmail()
 
-			gitClient, err := git.New(app.Shell)
-			if err != nil {
-				return fmt.Errorf("failed to initialize git client: %w", err)
-			}
+			gitClient := git.NewWithAuth(token)
 
 			if err := gitClient.Commit(secretsPath, "initialized secret store", userName, userEmail); err != nil {
 				return fmt.Errorf("failed to commit initial store: %w", err)
 			}
 
 			repoOwner := github.ExtractRepoOwner(repo)
-			remoteURL := fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", token, repoOwner, repoName)
+			remoteURL := fmt.Sprintf("https://github.com/%s/%s.git", repoOwner, repoName)
 
 			if err := gitClient.ConfigureRemote(secretsPath, "origin", remoteURL); err != nil {
 				return fmt.Errorf("failed to configure git remote: %w", err)

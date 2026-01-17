@@ -54,10 +54,7 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 		return fmt.Errorf("fingerprint not found: run 'kepr init' first")
 	}
 
-	gitClient, err := git.New(executor)
-	if err != nil {
-		return fmt.Errorf("failed to initialize git client: %w", err)
-	}
+	gitClient := git.NewWithAuth(token)
 
 	if err := gitClient.Pull(secretsPath, "origin", "main", true); err != nil {
 		return fmt.Errorf("failed to pull from remote: %w", err)
