@@ -30,14 +30,14 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/store"
 )
 
-func Execute(key string, githubClient github.Client, executor shell.Executor, io cout.IO) error {
+func Execute(key, repoPath string, githubClient github.Client, executor shell.Executor, io cout.IO) error {
 	token := config.GetToken()
 	if token == "" {
 		return fmt.Errorf("not authenticated: run 'kepr init' first")
 	}
 	githubClient.SetToken(token)
 
-	if err := IsInitialized(githubClient, executor, io); err != nil {
+	if err := IsInitialized(repoPath, githubClient, executor, io); err != nil {
 		return err
 	}
 
@@ -46,11 +46,11 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 		return fmt.Errorf("failed to get config directory: %w", err)
 	}
 
-	secretsPath := filepath.Join(configDir, "secrets")
-	fingerprint := config.GetUserFingerprint()
+	secretsPath := filepath.Join(configDir, repoPath)
+	fingerprint := config.GetUserFingerprintForRepo(repoPath)
 
 	if fingerprint == "" {
-		return fmt.Errorf("fingerprint not found: run 'kepr init' first")
+		return fmt.Errorf("fingerprint not found for repo '%s': run 'kepr init' first", repoPath)
 	}
 
 	g, err := gpg.New(configDir, executor, io)
@@ -65,7 +65,7 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 
 	gitClient := git.NewWithAuth(token)
 
-	p := pass.New(configDir, g, gitClient, io, executor, st)
+	p := pass.NewWithRepo(secretsPath, repoPath, g, gitClient, io, executor, st)
 
 	if err := p.Add(key); err != nil {
 		return err

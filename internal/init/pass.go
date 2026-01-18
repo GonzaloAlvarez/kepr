@@ -29,10 +29,10 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/store"
 )
 
-func SetupPasswordStore(configDir string, g *gpg.GPG, fingerprint string, executor shell.Executor, io cout.IO) error {
-	slog.Debug("initializing password store")
+func SetupPasswordStore(configDir, repoPath string, g *gpg.GPG, fingerprint string, executor shell.Executor, io cout.IO) error {
+	slog.Debug("initializing password store", "repo", repoPath)
 
-	secretsPath := filepath.Join(configDir, "secrets")
+	secretsPath := filepath.Join(configDir, repoPath)
 
 	st, err := store.New(secretsPath, fingerprint, g)
 	if err != nil {
@@ -41,7 +41,7 @@ func SetupPasswordStore(configDir string, g *gpg.GPG, fingerprint string, execut
 
 	gitClient := git.New()
 
-	p := pass.New(configDir, g, gitClient, io, executor, st)
+	p := pass.New(secretsPath, g, gitClient, io, executor, st)
 
 	if err := p.Init(fingerprint); err != nil {
 		return fmt.Errorf("failed to initialize password store: %w", err)

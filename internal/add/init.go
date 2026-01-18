@@ -28,8 +28,8 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func IsInitialized(githubClient github.Client, executor shell.Executor, io cout.IO) error {
-	slog.Debug("checking if kepr is initialized")
+func IsInitialized(repoPath string, githubClient github.Client, executor shell.Executor, io cout.IO) error {
+	slog.Debug("checking if kepr is initialized", "repo", repoPath)
 
 	configDir, err := config.Dir()
 	if err != nil {
@@ -40,11 +40,11 @@ func IsInitialized(githubClient github.Client, executor shell.Executor, io cout.
 		return fmt.Errorf("kepr is not initialized: run 'kepr init' first")
 	}
 
-	configUserName := config.GetUserName()
-	configUserEmail := config.GetUserEmail()
+	configUserName := config.GetUserNameForRepo(repoPath)
+	configUserEmail := config.GetUserEmailForRepo(repoPath)
 
 	if configUserName == "" || configUserEmail == "" {
-		return fmt.Errorf("user identity not configured: run 'kepr init' first")
+		return fmt.Errorf("user identity not configured for repo '%s': run 'kepr init' first", repoPath)
 	}
 
 	_, email, err := githubClient.GetUserIdentity()

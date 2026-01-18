@@ -18,7 +18,6 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 
 	initialize "github.com/gonzaloalvarez/kepr/internal/init"
 	"github.com/gonzaloalvarez/kepr/pkg/config"
@@ -62,13 +61,13 @@ func NewInitCmd(app *App) *cobra.Command {
 				return fmt.Errorf("failed to save repository configuration: %w", err)
 			}
 
-			if err := initialize.UserInfo(app.GitHub, app.UI); err != nil {
+			fingerprint, err := initialize.SelectOrCreateIdentity(app.Shell, app.UI)
+			if err != nil {
 				return err
 			}
 
-			g, err := initialize.SetupGPG(app.Shell, app.UI)
-			if err != nil {
-				return err
+			if err := config.SetRepoFingerprint(repo, fingerprint); err != nil {
+				return fmt.Errorf("failed to link identity to repo: %w", err)
 			}
 
 			configDir, err := config.Dir()
@@ -76,16 +75,22 @@ func NewInitCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			fingerprint := config.GetUserFingerprint()
-
-			if err := initialize.SetupPasswordStore(configDir, g, fingerprint, app.Shell, app.UI); err != nil {
+			g, err := initialize.SetupGPGForIdentity(fingerprint, app.Shell, app.UI)
+			if err != nil {
 				return err
 			}
 
-			secretsPath := filepath.Join(configDir, "secrets")
+			if err := initialize.SetupPasswordStore(configDir, repo, g, fingerprint, app.Shell, app.UI); err != nil {
+				return err
+			}
 
-			userName := config.GetUserName()
-			userEmail := config.GetUserEmail()
+			secretsPath, err := config.SecretsPathForRepo(repo)
+			if err != nil {
+				return err
+			}
+
+			userName := config.GetUserNameForRepo(repo)
+			userEmail := config.GetUserEmailForRepo(repo)
 
 			gitClient := git.NewWithAuth(token)
 
