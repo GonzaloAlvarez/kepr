@@ -18,7 +18,6 @@ package get
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/gonzaloalvarez/kepr/internal/add"
 	"github.com/gonzaloalvarez/kepr/pkg/config"
@@ -42,16 +41,14 @@ func Execute(key, repoPath string, githubClient github.Client, executor shell.Ex
 		return err
 	}
 
-	configDir, err := config.Dir()
+	secretsPath, err := config.SecretsPathForRepo(repoPath)
 	if err != nil {
-		return fmt.Errorf("failed to get config directory: %w", err)
+		return fmt.Errorf("failed to get secrets path: %w", err)
 	}
 
-	secretsPath := filepath.Join(configDir, repoPath)
-	fingerprint := config.GetUserFingerprintForRepo(repoPath)
-
+	fingerprint := config.GetUserFingerprint()
 	if fingerprint == "" {
-		return fmt.Errorf("fingerprint not found for repo '%s': run 'kepr init' first", repoPath)
+		return fmt.Errorf("fingerprint not found: run 'kepr init' first")
 	}
 
 	gitClient := git.NewWithAuth(token)
@@ -60,12 +57,17 @@ func Execute(key, repoPath string, githubClient github.Client, executor shell.Ex
 		return fmt.Errorf("failed to pull from remote: %w", err)
 	}
 
+	configDir, err := config.Dir()
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
+	}
+
 	g, err := gpg.New(configDir, executor, io)
 	if err != nil {
 		return fmt.Errorf("failed to initialize gpg: %w", err)
 	}
 
-	userPin := config.GetYubikeyUserPinForRepo(repoPath)
+	userPin := config.GetYubikeyUserPin()
 	if userPin != "" && userPin != "manual" {
 		y := gpg.NewYubikey(g)
 
@@ -81,7 +83,7 @@ func Execute(key, repoPath string, githubClient github.Client, executor shell.Ex
 		return fmt.Errorf("failed to create store: %w", err)
 	}
 
-	p := pass.NewWithRepo(secretsPath, repoPath, g, nil, io, executor, st)
+	p := pass.New(secretsPath, g, nil, io, executor, st)
 
 	return p.Get(key)
 }

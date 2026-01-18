@@ -61,13 +61,13 @@ func NewInitCmd(app *App) *cobra.Command {
 				return fmt.Errorf("failed to save repository configuration: %w", err)
 			}
 
-			fingerprint, err := initialize.SelectOrCreateIdentity(app.Shell, app.UI)
-			if err != nil {
+			if err := initialize.UserInfo(app.GitHub, app.UI); err != nil {
 				return err
 			}
 
-			if err := config.SetRepoFingerprint(repo, fingerprint); err != nil {
-				return fmt.Errorf("failed to link identity to repo: %w", err)
+			g, err := initialize.SetupGPG(app.Shell, app.UI)
+			if err != nil {
+				return err
 			}
 
 			configDir, err := config.Dir()
@@ -75,10 +75,7 @@ func NewInitCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			g, err := initialize.SetupGPGForIdentity(fingerprint, app.Shell, app.UI)
-			if err != nil {
-				return err
-			}
+			fingerprint := config.GetUserFingerprint()
 
 			if err := initialize.SetupPasswordStore(configDir, repo, g, fingerprint, app.Shell, app.UI); err != nil {
 				return err
@@ -89,8 +86,8 @@ func NewInitCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			userName := config.GetUserNameForRepo(repo)
-			userEmail := config.GetUserEmailForRepo(repo)
+			userName := config.GetUserName()
+			userEmail := config.GetUserEmail()
 
 			gitClient := git.NewWithAuth(token)
 

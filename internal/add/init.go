@@ -40,11 +40,11 @@ func IsInitialized(repoPath string, githubClient github.Client, executor shell.E
 		return fmt.Errorf("kepr is not initialized: run 'kepr init' first")
 	}
 
-	configUserName := config.GetUserNameForRepo(repoPath)
-	configUserEmail := config.GetUserEmailForRepo(repoPath)
+	configUserName := config.GetUserName()
+	configUserEmail := config.GetUserEmail()
 
 	if configUserName == "" || configUserEmail == "" {
-		return fmt.Errorf("user identity not configured for repo '%s': run 'kepr init' first", repoPath)
+		return fmt.Errorf("user identity not configured: run 'kepr init' first")
 	}
 
 	_, email, err := githubClient.GetUserIdentity()

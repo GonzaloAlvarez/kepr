@@ -46,7 +46,7 @@ func NewRootCmd(app *App) *cobra.Command {
 			}
 			slog.Debug("initialization complete")
 
-			resolvedRepo = resolveRepo(cmd)
+			resolvedRepo = resolveRepo()
 			slog.Debug("resolved repo", "repo", resolvedRepo)
 
 			return nil
@@ -59,13 +59,11 @@ func NewRootCmd(app *App) *cobra.Command {
 	rootCmd.AddCommand(NewInitCmd(app))
 	rootCmd.AddCommand(NewAddCmd(app))
 	rootCmd.AddCommand(NewGetCmd(app))
-	rootCmd.AddCommand(NewUseCmd(app))
-	rootCmd.AddCommand(NewListCmd(app))
 
 	return rootCmd
 }
 
-func resolveRepo(cmd *cobra.Command) string {
+func resolveRepo() string {
 	if repoFlag != "" {
 		return repoFlag
 	}

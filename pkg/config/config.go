@@ -23,29 +23,27 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 )
 
-const CurrentConfigVersion = 2
-
-type Identity struct {
-	Name           string `json:"name"`
-	Email          string `json:"email"`
-	YubikeySerial  string `json:"yubikey_serial,omitempty"`
-	YubikeyAdminPin string `json:"yubikey_admin_pin,omitempty"`
-	YubikeyUserPin  string `json:"yubikey_user_pin,omitempty"`
+type GitHubRepo struct {
+	Name    string `json:"name"`
+	Default bool   `json:"default,omitempty"`
 }
 
-type RepoConfig struct {
-	Fingerprint string `json:"fingerprint"`
+type GitHub struct {
+	Token string       `json:"token,omitempty"`
+	Owner string       `json:"owner,omitempty"`
+	Repos []GitHubRepo `json:"repos,omitempty"`
 }
 
 type Config struct {
-	Version     int                    `json:"version"`
-	GitHubToken string                 `json:"github_token,omitempty"`
-	DefaultRepo string                 `json:"default_repo,omitempty"`
-	Identities  map[string]*Identity   `json:"identities,omitempty"`
-	Repos       map[string]*RepoConfig `json:"repos,omitempty"`
+	GitHub          GitHub `json:"github"`
+	UserName        string `json:"user_name,omitempty"`
+	UserEmail       string `json:"user_email,omitempty"`
+	UserFingerprint string `json:"user_fingerprint,omitempty"`
+	YubikeyAdminPin string `json:"yubikey_admin_pin,omitempty"`
+	YubikeyUserPin  string `json:"yubikey_user_pin,omitempty"`
+	YubikeySerial   string `json:"yubikey_serial,omitempty"`
 }
 
 var cfg *Config
@@ -86,35 +84,15 @@ func loadConfig() error {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			cfg = &Config{
-				Version:    CurrentConfigVersion,
-				Identities: make(map[string]*Identity),
-				Repos:      make(map[string]*RepoConfig),
-			}
+			cfg = &Config{}
 			return nil
 		}
 		return err
 	}
 
-	cfg = &Config{
-		Identities: make(map[string]*Identity),
-		Repos:      make(map[string]*RepoConfig),
-	}
+	cfg = &Config{}
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return fmt.Errorf("failed to parse config: %w", err)
-	}
-
-	if cfg.Identities == nil {
-		cfg.Identities = make(map[string]*Identity)
-	}
-	if cfg.Repos == nil {
-		cfg.Repos = make(map[string]*RepoConfig)
-	}
-
-	if cfg.Version < CurrentConfigVersion {
-		if err := migrateConfig(); err != nil {
-			return fmt.Errorf("failed to migrate config: %w", err)
-		}
 	}
 
 	return nil
@@ -168,92 +146,82 @@ func CheckDependencies() error {
 	return nil
 }
 
-func GetDefaultRepo() string {
+func GetToken() string {
 	if cfg == nil {
 		return ""
 	}
-	return cfg.DefaultRepo
+	return cfg.GitHub.Token
 }
 
-func SetDefaultRepo(repoPath string) error {
+func SaveToken(token string) error {
 	if cfg == nil {
 		return fmt.Errorf("config not initialized")
 	}
-	if _, exists := cfg.Repos[repoPath]; !exists {
-		return fmt.Errorf("repository '%s' not found in config", repoPath)
-	}
-	cfg.DefaultRepo = repoPath
+	cfg.GitHub.Token = token
 	return saveConfig()
 }
 
-func GetRepoConfig(repoPath string) (*RepoConfig, error) {
+func GetGitHubOwner() string {
 	if cfg == nil {
-		return nil, fmt.Errorf("config not initialized")
+		return ""
 	}
-	repo, exists := cfg.Repos[repoPath]
-	if !exists {
-		return nil, fmt.Errorf("repository '%s' not found", repoPath)
-	}
-	return repo, nil
+	return cfg.GitHub.Owner
 }
 
-func AddRepo(repoPath, fingerprint string) error {
+func SaveGitHubOwner(owner string) error {
 	if cfg == nil {
 		return fmt.Errorf("config not initialized")
 	}
-	cfg.Repos[repoPath] = &RepoConfig{
-		Fingerprint: fingerprint,
-	}
-	if cfg.DefaultRepo == "" {
-		cfg.DefaultRepo = repoPath
-	}
+	cfg.GitHub.Owner = owner
 	return saveConfig()
 }
 
-func ListRepos() []string {
+func AddRepo(name string) error {
+	if cfg == nil {
+		return fmt.Errorf("config not initialized")
+	}
+
+	for _, r := range cfg.GitHub.Repos {
+		if r.Name == name {
+			return nil
+		}
+	}
+
+	isDefault := len(cfg.GitHub.Repos) == 0
+	cfg.GitHub.Repos = append(cfg.GitHub.Repos, GitHubRepo{
+		Name:    name,
+		Default: isDefault,
+	})
+	return saveConfig()
+}
+
+func GetDefaultRepo() string {
+	if cfg == nil || cfg.GitHub.Owner == "" {
+		return ""
+	}
+
+	for _, r := range cfg.GitHub.Repos {
+		if r.Default {
+			return cfg.GitHub.Owner + "/" + r.Name
+		}
+	}
+
+	if len(cfg.GitHub.Repos) > 0 {
+		return cfg.GitHub.Owner + "/" + cfg.GitHub.Repos[0].Name
+	}
+
+	return ""
+}
+
+func GetRepoNames() []string {
 	if cfg == nil {
 		return nil
 	}
-	repos := make([]string, 0, len(cfg.Repos))
-	for repo := range cfg.Repos {
-		repos = append(repos, repo)
+	names := make([]string, len(cfg.GitHub.Repos))
+	for i, r := range cfg.GitHub.Repos {
+		names[i] = r.Name
 	}
-	sort.Strings(repos)
-	return repos
-}
-
-func GetIdentity(fingerprint string) (*Identity, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("config not initialized")
-	}
-	identity, exists := cfg.Identities[fingerprint]
-	if !exists {
-		return nil, fmt.Errorf("identity with fingerprint '%s' not found", fingerprint)
-	}
-	return identity, nil
-}
-
-func GetIdentityForRepo(repoPath string) (*Identity, error) {
-	repo, err := GetRepoConfig(repoPath)
-	if err != nil {
-		return nil, err
-	}
-	return GetIdentity(repo.Fingerprint)
-}
-
-func AddIdentity(fingerprint string, identity *Identity) error {
-	if cfg == nil {
-		return fmt.Errorf("config not initialized")
-	}
-	cfg.Identities[fingerprint] = identity
-	return saveConfig()
-}
-
-func ListIdentities() map[string]*Identity {
-	if cfg == nil {
-		return nil
-	}
-	return cfg.Identities
+	return names
 }
 
 func SecretsPathForRepo(repoPath string) (string, error) {
@@ -264,173 +232,86 @@ func SecretsPathForRepo(repoPath string) (string, error) {
 	return filepath.Join(dir, repoPath), nil
 }
 
-func SaveToken(token string) error {
-	if cfg == nil {
-		return fmt.Errorf("config not initialized")
-	}
-	cfg.GitHubToken = token
-	return saveConfig()
-}
-
-func GetToken() string {
-	if cfg == nil {
-		return ""
-	}
-	return cfg.GitHubToken
-}
-
-func SaveUserIdentity(name, email string) error {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
-		return fmt.Errorf("no default repository set")
-	}
-	repo, err := GetRepoConfig(repoPath)
-	if err != nil {
-		return err
-	}
-	identity, err := GetIdentity(repo.Fingerprint)
-	if err != nil {
-		return err
-	}
-	identity.Name = name
-	identity.Email = email
-	return saveConfig()
-}
-
-func SaveFingerprint(fingerprint string) error {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
-		return fmt.Errorf("no default repository set")
-	}
-	repo, err := GetRepoConfig(repoPath)
-	if err != nil {
-		return err
-	}
-	repo.Fingerprint = fingerprint
-	return saveConfig()
-}
-
 func GetUserName() string {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
+	if cfg == nil {
 		return ""
 	}
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return ""
-	}
-	return identity.Name
+	return cfg.UserName
 }
 
 func GetUserEmail() string {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
+	if cfg == nil {
 		return ""
 	}
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return ""
+	return cfg.UserEmail
+}
+
+func SaveUserIdentity(name, email string) error {
+	if cfg == nil {
+		return fmt.Errorf("config not initialized")
 	}
-	return identity.Email
+	cfg.UserName = name
+	cfg.UserEmail = email
+	return saveConfig()
 }
 
 func GetUserFingerprint() string {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
+	if cfg == nil {
 		return ""
 	}
-	repo, err := GetRepoConfig(repoPath)
-	if err != nil {
-		return ""
-	}
-	return repo.Fingerprint
+	return cfg.UserFingerprint
 }
 
-func SaveYubikeyAdminPin(pin string) error {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
-		return fmt.Errorf("no default repository set")
+func SaveFingerprint(fingerprint string) error {
+	if cfg == nil {
+		return fmt.Errorf("config not initialized")
 	}
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return err
-	}
-	identity.YubikeyAdminPin = pin
+	cfg.UserFingerprint = fingerprint
 	return saveConfig()
 }
 
 func GetYubikeyAdminPin() string {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
+	if cfg == nil {
 		return ""
 	}
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return ""
-	}
-	return identity.YubikeyAdminPin
+	return cfg.YubikeyAdminPin
 }
 
-func SaveYubikeyUserPin(pin string) error {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
-		return fmt.Errorf("no default repository set")
+func SaveYubikeyAdminPin(pin string) error {
+	if cfg == nil {
+		return fmt.Errorf("config not initialized")
 	}
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return err
-	}
-	identity.YubikeyUserPin = pin
+	cfg.YubikeyAdminPin = pin
 	return saveConfig()
 }
 
 func GetYubikeyUserPin() string {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
+	if cfg == nil {
 		return ""
 	}
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return ""
-	}
-	return identity.YubikeyUserPin
+	return cfg.YubikeyUserPin
 }
 
-func SaveYubikeySerial(serial string) error {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
-		return fmt.Errorf("no default repository set")
+func SaveYubikeyUserPin(pin string) error {
+	if cfg == nil {
+		return fmt.Errorf("config not initialized")
 	}
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return err
-	}
-	identity.YubikeySerial = serial
+	cfg.YubikeyUserPin = pin
 	return saveConfig()
 }
 
 func GetYubikeySerial() string {
-	repoPath := GetDefaultRepo()
-	if repoPath == "" {
+	if cfg == nil {
 		return ""
 	}
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return ""
-	}
-	return identity.YubikeySerial
+	return cfg.YubikeySerial
 }
 
-func SaveGitHubRepo(repo string) error {
+func SaveYubikeySerial(serial string) error {
 	if cfg == nil {
 		return fmt.Errorf("config not initialized")
 	}
-	if _, exists := cfg.Repos[repo]; !exists {
-		cfg.Repos[repo] = &RepoConfig{}
-	}
-	if cfg.DefaultRepo == "" {
-		cfg.DefaultRepo = repo
-	}
+	cfg.YubikeySerial = serial
 	return saveConfig()
 }
 
@@ -438,46 +319,28 @@ func GetGitHubRepo() string {
 	return GetDefaultRepo()
 }
 
-func GetUserNameForRepo(repoPath string) string {
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return ""
-	}
-	return identity.Name
-}
-
-func GetUserEmailForRepo(repoPath string) string {
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return ""
-	}
-	return identity.Email
-}
-
-func GetUserFingerprintForRepo(repoPath string) string {
-	repo, err := GetRepoConfig(repoPath)
-	if err != nil {
-		return ""
-	}
-	return repo.Fingerprint
-}
-
-func GetYubikeyUserPinForRepo(repoPath string) string {
-	identity, err := GetIdentityForRepo(repoPath)
-	if err != nil {
-		return ""
-	}
-	return identity.YubikeyUserPin
-}
-
-func SetRepoFingerprint(repoPath, fingerprint string) error {
+func SaveGitHubRepo(repoPath string) error {
 	if cfg == nil {
 		return fmt.Errorf("config not initialized")
 	}
-	repo, exists := cfg.Repos[repoPath]
-	if !exists {
-		return fmt.Errorf("repository '%s' not found", repoPath)
+
+	owner, name := splitRepoPath(repoPath)
+	if owner == "" || name == "" {
+		return fmt.Errorf("invalid repo path: %s", repoPath)
 	}
-	repo.Fingerprint = fingerprint
-	return saveConfig()
+
+	if cfg.GitHub.Owner == "" {
+		cfg.GitHub.Owner = owner
+	}
+
+	return AddRepo(name)
+}
+
+func splitRepoPath(repoPath string) (owner, name string) {
+	for i := 0; i < len(repoPath); i++ {
+		if repoPath[i] == '/' {
+			return repoPath[:i], repoPath[i+1:]
+		}
+	}
+	return "", repoPath
 }

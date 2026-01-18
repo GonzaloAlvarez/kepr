@@ -31,7 +31,6 @@ import (
 
 type Pass struct {
 	SecretsPath string
-	RepoPath    string
 	gpg         *gpg.GPG
 	store       *store.Store
 	git         *git.Git
@@ -42,18 +41,6 @@ type Pass struct {
 func New(secretsPath string, gpgClient *gpg.GPG, gitClient *git.Git, io cout.IO, executor shell.Executor, st *store.Store) *Pass {
 	return &Pass{
 		SecretsPath: secretsPath,
-		gpg:         gpgClient,
-		git:         gitClient,
-		store:       st,
-		io:          io,
-		executor:    executor,
-	}
-}
-
-func NewWithRepo(secretsPath, repoPath string, gpgClient *gpg.GPG, gitClient *git.Git, io cout.IO, executor shell.Executor, st *store.Store) *Pass {
-	return &Pass{
-		SecretsPath: secretsPath,
-		RepoPath:    repoPath,
 		gpg:         gpgClient,
 		git:         gitClient,
 		store:       st,
@@ -81,14 +68,8 @@ func (p *Pass) Add(key string) error {
 		return fmt.Errorf("failed to add secret: %w", err)
 	}
 
-	var userName, userEmail string
-	if p.RepoPath != "" {
-		userName = config.GetUserNameForRepo(p.RepoPath)
-		userEmail = config.GetUserEmailForRepo(p.RepoPath)
-	} else {
-		userName = config.GetUserName()
-		userEmail = config.GetUserEmail()
-	}
+	userName := config.GetUserName()
+	userEmail := config.GetUserEmail()
 
 	if err := p.git.Commit(p.SecretsPath, "updated store with new UUID "+uuid, userName, userEmail); err != nil {
 		return fmt.Errorf("failed to commit changes: %w", err)
