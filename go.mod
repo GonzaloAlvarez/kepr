@@ -8,7 +8,6 @@ require (
 	github.com/google/go-github/v67 v67.0.0
 	github.com/pterm/pterm v0.12.82
 	github.com/spf13/cobra v1.10.1
-	github.com/spf13/viper v1.21.0
 	golang.org/x/oauth2 v0.33.0
 )
 

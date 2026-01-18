@@ -21,8 +21,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/spf13/viper"
 )
 
 func TestDir_ReturnsKeprSubdirectory(t *testing.T) {
@@ -94,16 +92,5 @@ func TestCheckDependencies(t *testing.T) {
 	err := CheckDependencies()
 	if err != nil {
 		t.Logf("CheckDependencies() returned error (may be expected if gpg or git not installed): %v", err)
-	}
-}
-
-func TestViperReset_IsolatesTests(t *testing.T) {
-	viper.Set("test_key", "test_value")
-
-	viper.Reset()
-
-	value := viper.GetString("test_key")
-	if value != "" {
-		t.Errorf("expected empty string after reset, got %q", value)
 	}
 }
