@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/spf13/cobra"
@@ -65,6 +66,14 @@ func NewRootCmd(app *App) *cobra.Command {
 
 func resolveRepo() string {
 	if repoFlag != "" {
+		if strings.Contains(repoFlag, "/") {
+			return repoFlag
+		}
+		// Just repo name provided, prepend owner
+		owner := config.GetGitHubOwner()
+		if owner != "" {
+			return owner + "/" + repoFlag
+		}
 		return repoFlag
 	}
 	return config.GetDefaultRepo()

@@ -90,19 +90,28 @@ nuke:
 		echo "Error: config.json not found"; \
 		exit 1; \
 	fi; \
-	TOKEN=$$(grep '"github_token"' "$$CONFIG_FILE" | sed 's/.*"github_token": *"\([^"]*\)".*/\1/'); \
-	REPO=$$(grep '"github_repo"' "$$CONFIG_FILE" | sed 's/.*"github_repo": *"\([^"]*\)".*/\1/'); \
-	if [ -z "$$TOKEN" ] || [ -z "$$REPO" ]; then \
-		echo "Error: github_token or github_repo not found in config"; \
+	TOKEN=$$(jq -r '.github.token' "$$CONFIG_FILE"); \
+	OWNER=$$(jq -r '.github.owner' "$$CONFIG_FILE"); \
+	if [ -z "$$TOKEN" ] || [ "$$TOKEN" = "null" ]; then \
+		echo "Error: github.token not found in config"; \
 		exit 1; \
 	fi; \
-	echo "Deleting repository: $$REPO"; \
-	curl -s -X DELETE \
-		-H "Authorization: Bearer $$TOKEN" \
-		-H "Accept: application/vnd.github+json" \
-		"https://api.github.com/repos/$$REPO"; \
-	echo "Repository deleted"; \
+	if [ -z "$$OWNER" ] || [ "$$OWNER" = "null" ]; then \
+		echo "Error: github.owner not found in config"; \
+		exit 1; \
+	fi; \
+	REPOS=$$(jq -r '.github.repos[].name' "$$CONFIG_FILE"); \
+	for REPO in $$REPOS; do \
+		echo "Deleting repository: $$OWNER/$$REPO"; \
+		curl -s -X DELETE \
+			-H "Authorization: Bearer $$TOKEN" \
+			-H "Accept: application/vnd.github+json" \
+			"https://api.github.com/repos/$$OWNER/$$REPO"; \
+	done; \
+	echo "All repositories deleted"; \
 	echo "Resetting YubiKey GPG card..."; \
 	gpg-card factory-reset || echo "GPG card reset failed"; \
+	echo "Removing config directory..."; \
+	rm -rf "$$CONFIG_DIR"; \
 	echo "Nuke complete"
 
