@@ -27,7 +27,11 @@ func NewGetCmd(app *App) *cobra.Command {
 		Short: "Retrieve a secret from the store",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return get.Execute(args[0], app.GitHub, app.Shell, app.UI)
+			repoPath, err := RequireRepo()
+			if err != nil {
+				return err
+			}
+			return get.Execute(args[0], repoPath, app.GitHub, app.Shell, app.UI)
 		},
 	}
 }

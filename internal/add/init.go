@@ -28,8 +28,8 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func IsInitialized(githubClient github.Client, executor shell.Executor, io cout.IO) error {
-	slog.Debug("checking if kepr is initialized")
+func IsInitialized(repoPath string, githubClient github.Client, executor shell.Executor, io cout.IO) error {
+	slog.Debug("checking if kepr is initialized", "repo", repoPath)
 
 	configDir, err := config.Dir()
 	if err != nil {

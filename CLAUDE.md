@@ -27,7 +27,7 @@ make nuke       # Full reset - deletes GitHub repo, resets YubiKey (dev builds o
   - `github/` - GitHub API client (OAuth, repo operations)
   - `git/` - Git operations using go-git library (pure Go, no shell dependency)
   - `pass/` - High-level password store API orchestrating store+gpg+git
-  - `config/` - Viper-based configuration (~/.config/kepr/config.json)
+  - `config/` - JSON-based configuration (~/.config/kepr/config.json)
   - `cout/` - Console I/O interface using pterm
   - `shell/` - Shell execution abstraction
 - **internal/** - Private workflows:

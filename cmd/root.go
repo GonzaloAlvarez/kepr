@@ -20,12 +20,17 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/spf13/cobra"
 )
 
-var debugMode bool
+var (
+	debugMode    bool
+	repoFlag     string
+	resolvedRepo string
+)
 
 func NewRootCmd(app *App) *cobra.Command {
 	rootCmd := &cobra.Command{
@@ -42,17 +47,47 @@ func NewRootCmd(app *App) *cobra.Command {
 			}
 			slog.Debug("initialization complete")
 
+			resolvedRepo = resolveRepo()
+			slog.Debug("resolved repo", "repo", resolvedRepo)
+
 			return nil
 		},
 	}
 
 	rootCmd.PersistentFlags().BoolVarP(&debugMode, "debug", "d", false, "enable debug logging")
+	rootCmd.PersistentFlags().StringVarP(&repoFlag, "repo", "r", "", "repository to use (owner/repo)")
 
 	rootCmd.AddCommand(NewInitCmd(app))
 	rootCmd.AddCommand(NewAddCmd(app))
 	rootCmd.AddCommand(NewGetCmd(app))
 
 	return rootCmd
+}
+
+func resolveRepo() string {
+	if repoFlag != "" {
+		if strings.Contains(repoFlag, "/") {
+			return repoFlag
+		}
+		// Just repo name provided, prepend owner
+		owner := config.GetGitHubOwner()
+		if owner != "" {
+			return owner + "/" + repoFlag
+		}
+		return repoFlag
+	}
+	return config.GetDefaultRepo()
+}
+
+func GetResolvedRepo() string {
+	return resolvedRepo
+}
+
+func RequireRepo() (string, error) {
+	if resolvedRepo == "" {
+		return "", fmt.Errorf("no repository specified. Use -r flag or 'kepr use <repo>' to set default")
+	}
+	return resolvedRepo, nil
 }
 
 func initLogging() {

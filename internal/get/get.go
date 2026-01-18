@@ -18,7 +18,6 @@ package get
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/gonzaloalvarez/kepr/internal/add"
 	"github.com/gonzaloalvarez/kepr/pkg/config"
@@ -31,25 +30,23 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/store"
 )
 
-func Execute(key string, githubClient github.Client, executor shell.Executor, io cout.IO) error {
+func Execute(key, repoPath string, githubClient github.Client, executor shell.Executor, io cout.IO) error {
 	token := config.GetToken()
 	if token == "" {
 		return fmt.Errorf("not authenticated: run 'kepr init' first")
 	}
 	githubClient.SetToken(token)
 
-	if err := add.IsInitialized(githubClient, executor, io); err != nil {
+	if err := add.IsInitialized(repoPath, githubClient, executor, io); err != nil {
 		return err
 	}
 
-	configDir, err := config.Dir()
+	secretsPath, err := config.SecretsPathForRepo(repoPath)
 	if err != nil {
-		return fmt.Errorf("failed to get config directory: %w", err)
+		return fmt.Errorf("failed to get secrets path: %w", err)
 	}
 
-	secretsPath := filepath.Join(configDir, "secrets")
 	fingerprint := config.GetUserFingerprint()
-
 	if fingerprint == "" {
 		return fmt.Errorf("fingerprint not found: run 'kepr init' first")
 	}
@@ -58,6 +55,11 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 
 	if err := gitClient.Pull(secretsPath, "origin", "main", true); err != nil {
 		return fmt.Errorf("failed to pull from remote: %w", err)
+	}
+
+	configDir, err := config.Dir()
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
 	}
 
 	g, err := gpg.New(configDir, executor, io)
@@ -81,7 +83,7 @@ func Execute(key string, githubClient github.Client, executor shell.Executor, io
 		return fmt.Errorf("failed to create store: %w", err)
 	}
 
-	p := pass.New(configDir, g, nil, io, executor, st)
+	p := pass.New(secretsPath, g, nil, io, executor, st)
 
 	return p.Get(key)
 }

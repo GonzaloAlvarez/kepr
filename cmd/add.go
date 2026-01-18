@@ -28,7 +28,11 @@ func NewAddCmd(app *App) *cobra.Command {
 		Short:   "Add a secret to the store",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return add.Execute(args[0], app.GitHub, app.Shell, app.UI)
+			repoPath, err := RequireRepo()
+			if err != nil {
+				return err
+			}
+			return add.Execute(args[0], repoPath, app.GitHub, app.Shell, app.UI)
 		},
 	}
 }

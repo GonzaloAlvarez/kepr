@@ -18,7 +18,6 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 
 	initialize "github.com/gonzaloalvarez/kepr/internal/init"
 	"github.com/gonzaloalvarez/kepr/pkg/config"
@@ -78,11 +77,14 @@ func NewInitCmd(app *App) *cobra.Command {
 
 			fingerprint := config.GetUserFingerprint()
 
-			if err := initialize.SetupPasswordStore(configDir, g, fingerprint, app.Shell, app.UI); err != nil {
+			if err := initialize.SetupPasswordStore(configDir, repo, g, fingerprint, app.Shell, app.UI); err != nil {
 				return err
 			}
 
-			secretsPath := filepath.Join(configDir, "secrets")
+			secretsPath, err := config.SecretsPathForRepo(repo)
+			if err != nil {
+				return err
+			}
 
 			userName := config.GetUserName()
 			userEmail := config.GetUserEmail()

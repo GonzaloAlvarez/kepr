@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
@@ -39,9 +38,9 @@ type Pass struct {
 	executor    shell.Executor
 }
 
-func New(configDir string, gpgClient *gpg.GPG, gitClient *git.Git, io cout.IO, executor shell.Executor, st *store.Store) *Pass {
+func New(secretsPath string, gpgClient *gpg.GPG, gitClient *git.Git, io cout.IO, executor shell.Executor, st *store.Store) *Pass {
 	return &Pass{
-		SecretsPath: filepath.Join(configDir, "secrets"),
+		SecretsPath: secretsPath,
 		gpg:         gpgClient,
 		git:         gitClient,
 		store:       st,

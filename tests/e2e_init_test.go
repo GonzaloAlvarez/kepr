@@ -8,7 +8,6 @@ import (
 
 	"github.com/gonzaloalvarez/kepr/cmd"
 	"github.com/gonzaloalvarez/kepr/tests/mocks"
-	"github.com/spf13/viper"
 )
 
 func TestInit_HappyPath(t *testing.T) {
@@ -22,8 +21,6 @@ func TestInit_HappyPath(t *testing.T) {
 		os.Setenv("HOME", oldHome)
 		os.Setenv("XDG_CONFIG_HOME", oldConfigHome)
 	}()
-
-	viper.Reset()
 
 	mockShell := mocks.NewMockShell()
 	mockUI := mocks.NewMockUI()
