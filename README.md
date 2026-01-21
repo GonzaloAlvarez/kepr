@@ -4,15 +4,15 @@
 
 # kepr
 
-**kepr** (Key Encrypted Private Ring) is an opinionated, serverless, and secure command-line secret manager. It uses industry-standard tools—`gpg` and `git`—to provide a seamless experience for managing encrypted secrets backed by hardware security modules (YubiKeys).
+**kepr** (Key Encrypted Private Ring) is an opinionated, serverless, and secure command-line secret manager. It uses `gpg` behind sceneas to provide a seamless experience for managing encrypted secrets backed by hardware security modules (YubiKeys).
 
 ## Motivation
 
-Managing secrets securely across teams and remote systems often requires setting up complex infrastructure (like HashiCorp Vault) or relying on purely software-based keys which are prone to theft.
+Managing secrets securely across teams and remote systems often requires setting up complex infrastructure (like HashiCorp Vault) or relying on purely software-based keys which are not scalable across systems and teams.
 
 `kepr` was built to solve specific pain points:
 1.  **Serverless:** It relies entirely on public/private Git repositories (GitHub) for storage and distribution. No self-hosted servers required.
-2.  **Hardware Enforced:** Decryption keys are generated on or moved to a YubiKey. If you don't have the physical token, you can't access the secrets.
+2.  **Hardware Enforced:** Decryption keys are generated on or moved to a YubiKey.
 3.  **Git-Native:** History, versioning, and rollback of secrets come for free via Git.
 4.  **Remote Friendly:** It solves the "Bootstrapping Trust" problem for CI/CD and remote servers using a GitOps-style request/approval workflow.
 5.  **Orchestration:** It does not roll its own crypto. It automates the complex configuration of GnuPG, providing a "porcelain" interface over the underlying plumbing.
@@ -105,7 +105,17 @@ $ kepr review-requests
 *   **Identity:**
     *   **Master Key:** Kept in "Cold Storage" (encrypted AES-256 backup in a private GitHub repo), deleted from local disk, never touches the YubiKey.
     *   **Subkeys:** Moved to the YubiKey (Encryption/Signing).
-*   **Isolation:** Runs with a custom `GNUPGHOME` (`~/.kepr/gpg`) to avoid interfering with your personal GPG configuration.
+*   **Isolation:** Runs with a custom `GNUPGHOME` to avoid interfering with your personal GPG configuration.
+
+## Configuration
+
+### Environment Variables
+
+*   `KEPR_HOME`: Override the default kepr directory location (defaults to `~/.config/kepr` on Linux/Unix, `~/Library/Application Support/kepr` on macOS)
+    *   Example: `export KEPR_HOME=/tmp/kepr-test`
+    *   Use cases: Testing, multi-environment setups, CI/CD isolation
+
+When `KEPR_HOME` is set, all kepr state (config, GPG home, secrets) will be stored under this directory instead of the system default.
 
 ## License
 

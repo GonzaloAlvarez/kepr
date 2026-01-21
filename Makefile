@@ -77,7 +77,9 @@ nuke:
 		echo "Error: kepr is not a dev build. This command only works with dev builds."; \
 		exit 1; \
 	fi
-	@if [ -d "$$HOME/Library/Application Support/kepr" ]; then \
+	@if [ -n "$$KEPR_HOME" ]; then \
+		CONFIG_DIR="$$KEPR_HOME"; \
+	elif [ -d "$$HOME/Library/Application Support/kepr" ]; then \
 		CONFIG_DIR="$$HOME/Library/Application Support/kepr"; \
 	elif [ -d "$$HOME/.config/kepr" ]; then \
 		CONFIG_DIR="$$HOME/.config/kepr"; \
