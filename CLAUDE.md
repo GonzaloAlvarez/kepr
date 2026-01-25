@@ -27,7 +27,7 @@ make nuke       # Full reset - deletes GitHub repo, resets YubiKey (dev builds o
   - `github/` - GitHub API client (OAuth, repo operations)
   - `git/` - Git operations using go-git library (pure Go, no shell dependency)
   - `pass/` - High-level password store API orchestrating store+gpg+git
-  - `config/` - JSON-based configuration (~/.config/kepr/config.json)
+  - `config/` - JSON-based configuration (config.json in KEPR_HOME)
   - `cout/` - Console I/O interface using pterm
   - `shell/` - Shell execution abstraction
 - **internal/** - Private workflows:
@@ -43,11 +43,13 @@ make nuke       # Full reset - deletes GitHub repo, resets YubiKey (dev builds o
 
 **Interface-Based Design**: All external dependencies are interfaces (`shell.Executor`, `cout.IO`, `github.Client`). Mocks are in `tests/mocks/`.
 
-**Isolated GPG Home**: Uses custom `GNUPGHOME` at `~/.kepr/gpg` to avoid interfering with user's GPG config.
+**Isolated GPG Home**: Uses custom `GNUPGHOME` to avoid interfering with user's GPG config. Defaults to `{KEPR_HOME}/gpg` where `KEPR_HOME` is the environment variable or system config directory.
 
-**UUID-Based Storage**: Secrets stored at `~/.kepr/secrets/` with UUIDs instead of readable paths. Each secret has encrypted metadata (`uuid_md.gpg`).
+**UUID-Based Storage**: Secrets stored at `{KEPR_HOME}/{owner}/{repo}` with UUIDs instead of readable paths. Each secret has encrypted metadata (`uuid_md.gpg`).
 
 **Cold Storage Model**: Master key backed up encrypted to GitHub, then deleted locally. Only subkeys remain on YubiKey.
+
+**Configurable Home**: Set `KEPR_HOME` environment variable to override default config directory location. All kepr state (config, GPG home, secrets) will be stored under this directory.
 
 ### Data Flow
 

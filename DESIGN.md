@@ -10,17 +10,17 @@
     *   Disaster Recovery (Encrypted Identity Backup).
     *   Data Synchronization (Git Repositories).
 3.  **No "Rolled" Crypto:** `kepr` does not implement encryption primitives. It delegates all cryptographic operations to GnuPG, using a custom UUID-based encrypted storage system.
-4.  **Isolation:** `kepr` maintains its own state in `~/.kepr`, ensuring it does not conflict with the user's existing `~/.gnupg` or git configurations.
+4.  **Isolation:** `kepr` maintains its own state, ensuring it does not conflict with the user's existing `~/.gnupg` or git configurations. The state directory can be customized via the `KEPR_HOME` environment variable (defaults to `~/.config/kepr` on Linux/Unix, `~/Library/Application Support/kepr` on macOS).
 
 ## 3. System Architecture
 
 ### 3.1 Directory Structure
-`kepr` separates application state from data storage.
+`kepr` separates application state from data storage. All paths are relative to `KEPR_HOME` (customizable via environment variable, defaults to system config directory).
 
-*   **Application State (`~/.kepr/`)**
+*   **Application State (`{KEPR_HOME}/`)**
     *   `config.json`: Local configuration (Current user fingerprint, path to data repo, GitHub tokens).
     *   `gpg/`: A custom GnuPG home directory. Contains keyrings and `gpg-agent.conf`.
-*   **Data Storage (`~/.kepr/secrets/`)**
+*   **Data Storage (`{KEPR_HOME}/{owner}/{repo}/`)**
     *   UUID-based directory structure where each secret and directory has a unique identifier.
     *   `.git/`: The git repository tracking changes.
     *   `.gpg.id`: The GPG key fingerprint authorized for decryption.
@@ -41,7 +41,7 @@ During `kepr init`:
 ### 3.3 Remote/Machine Access (The "GitOps" Flow)
 Servers (e.g., EC2, Kubernetes workers) cannot use YubiKeys. `kepr` implements a specific flow for "Machine Users":
 
-1.  **Request:** The remote machine generates a local, file-based key pair (`~/.kepr/gpg`). It creates a new git branch `access-request/<hostname>` and pushes its public key to a `requests/` directory on that branch.
+1.  **Request:** The remote machine generates a local, file-based key pair. It creates a new git branch `access-request/<hostname>` and pushes its public key to a `requests/` directory on that branch.
 2.  **Review:** An admin (with a YubiKey) runs `kepr review-requests`. This fetches the branch, displays the machine's key fingerprint for verification, and asks for approval.
 3.  **Approval:** If approved, the admin imports the machine's key, adds it to the `.gpg-id` recipients list (scoped to specific folders if needed), re-encrypts the secrets, and pushes the changes to `main`.
 

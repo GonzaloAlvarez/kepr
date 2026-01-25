@@ -49,11 +49,22 @@ type Config struct {
 var cfg *Config
 
 func Dir() (string, error) {
+	if keprHome := os.Getenv("KEPR_HOME"); keprHome != "" {
+		absPath, err := filepath.Abs(keprHome)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve KEPR_HOME: %w", err)
+		}
+		slog.Debug("using KEPR_HOME", "path", absPath)
+		return absPath, nil
+	}
+
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(configDir, "kepr"), nil
+	defaultPath := filepath.Join(configDir, "kepr")
+	slog.Debug("using default config directory", "path", defaultPath)
+	return defaultPath, nil
 }
 
 func Init() error {

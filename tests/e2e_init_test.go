@@ -13,13 +13,15 @@ import (
 func TestInit_HappyPath(t *testing.T) {
 	tempDir := t.TempDir()
 
-	oldHome := os.Getenv("HOME")
-	oldConfigHome := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("HOME", tempDir)
-	os.Setenv("XDG_CONFIG_HOME", filepath.Join(tempDir, ".config"))
+	keprHome := filepath.Join(tempDir, "kepr")
+	oldKeprHome := os.Getenv("KEPR_HOME")
+	os.Setenv("KEPR_HOME", keprHome)
 	defer func() {
-		os.Setenv("HOME", oldHome)
-		os.Setenv("XDG_CONFIG_HOME", oldConfigHome)
+		if oldKeprHome != "" {
+			os.Setenv("KEPR_HOME", oldKeprHome)
+		} else {
+			os.Unsetenv("KEPR_HOME")
+		}
 	}()
 
 	mockShell := mocks.NewMockShell()
@@ -63,7 +65,7 @@ func TestInit_HappyPath(t *testing.T) {
 		t.Errorf("expected token to be set, got: %s", mockGitHub.Token)
 	}
 
-	configPath := filepath.Join(tempDir, "Library", "Application Support", "kepr", "config.json")
+	configPath := filepath.Join(keprHome, "config.json")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Errorf("expected config file to exist at %s", configPath)
 	}

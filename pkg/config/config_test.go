@@ -1,16 +1,13 @@
 /*
 Copyright © 2025 Gonzalo Alvarez
-
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
-
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
-
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
@@ -24,6 +21,16 @@ import (
 )
 
 func TestDir_ReturnsKeprSubdirectory(t *testing.T) {
+	oldKeprHome := os.Getenv("KEPR_HOME")
+	defer func() {
+		if oldKeprHome != "" {
+			os.Setenv("KEPR_HOME", oldKeprHome)
+		} else {
+			os.Unsetenv("KEPR_HOME")
+		}
+	}()
+	os.Unsetenv("KEPR_HOME")
+
 	dir, err := Dir()
 	if err != nil {
 		t.Fatalf("Dir() failed: %v", err)
@@ -38,21 +45,50 @@ func TestDir_ReturnsKeprSubdirectory(t *testing.T) {
 	}
 }
 
-func TestEnsureConfigDir_CreatesDirectory(t *testing.T) {
+func TestDir_UsesKeprHomeEnv(t *testing.T) {
+	tempDir := t.TempDir()
+	keprHome := filepath.Join(tempDir, "custom-kepr")
+
+	oldKeprHome := os.Getenv("KEPR_HOME")
+	os.Setenv("KEPR_HOME", keprHome)
+	defer func() {
+		if oldKeprHome != "" {
+			os.Setenv("KEPR_HOME", oldKeprHome)
+		} else {
+			os.Unsetenv("KEPR_HOME")
+		}
+	}()
+
 	dir, err := Dir()
 	if err != nil {
 		t.Fatalf("Dir() failed: %v", err)
 	}
 
-	os.RemoveAll(dir)
-	defer os.RemoveAll(dir)
+	if dir != keprHome {
+		t.Errorf("expected Dir() to return KEPR_HOME value %q, got %q", keprHome, dir)
+	}
+}
 
-	err = EnsureConfigDir()
+func TestEnsureConfigDir_CreatesDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	keprHome := filepath.Join(tempDir, "kepr")
+
+	oldKeprHome := os.Getenv("KEPR_HOME")
+	os.Setenv("KEPR_HOME", keprHome)
+	defer func() {
+		if oldKeprHome != "" {
+			os.Setenv("KEPR_HOME", oldKeprHome)
+		} else {
+			os.Unsetenv("KEPR_HOME")
+		}
+	}()
+
+	err := EnsureConfigDir()
 	if err != nil {
 		t.Fatalf("EnsureConfigDir() failed: %v", err)
 	}
 
-	info, err := os.Stat(dir)
+	info, err := os.Stat(keprHome)
 	if err != nil {
 		t.Fatalf("config directory not created: %v", err)
 	}
@@ -69,15 +105,20 @@ func TestEnsureConfigDir_CreatesDirectory(t *testing.T) {
 }
 
 func TestEnsureConfigDir_Idempotent(t *testing.T) {
-	dir, err := Dir()
-	if err != nil {
-		t.Fatalf("Dir() failed: %v", err)
-	}
+	tempDir := t.TempDir()
+	keprHome := filepath.Join(tempDir, "kepr")
 
-	os.RemoveAll(dir)
-	defer os.RemoveAll(dir)
+	oldKeprHome := os.Getenv("KEPR_HOME")
+	os.Setenv("KEPR_HOME", keprHome)
+	defer func() {
+		if oldKeprHome != "" {
+			os.Setenv("KEPR_HOME", oldKeprHome)
+		} else {
+			os.Unsetenv("KEPR_HOME")
+		}
+	}()
 
-	err = EnsureConfigDir()
+	err := EnsureConfigDir()
 	if err != nil {
 		t.Fatalf("first EnsureConfigDir() failed: %v", err)
 	}
