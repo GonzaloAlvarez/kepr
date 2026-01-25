@@ -19,6 +19,7 @@ package initialize
 import (
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
@@ -36,8 +37,14 @@ func AuthGithub(client github.Client, io cout.IO) (string, error) {
 		slog.Debug("no token found locally, starting authentication")
 		var err error
 
-		if githubClientSecret == "" {
-			slog.Debug("client secret not available, using device code flow")
+		ciMode := os.Getenv("KEPR_CI") == "true"
+
+		if ciMode || githubClientSecret == "" {
+			if ciMode {
+				slog.Debug("CI mode: forcing device code flow")
+			} else {
+				slog.Debug("client secret not available, using device code flow")
+			}
 			token, err = client.CodeBasedAuthentication(githubClientID, io)
 		} else {
 			slog.Debug("client secret available, using PKCE flow")

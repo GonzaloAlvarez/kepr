@@ -19,6 +19,7 @@ package cout
 import (
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/pterm/pterm"
 )
@@ -38,14 +39,26 @@ type IO interface {
 	Warning(message string)
 }
 
-type Terminal struct{}
+type Terminal struct {
+	ciMode bool
+}
 
 func NewTerminal() *Terminal {
-	return &Terminal{}
+	ciMode := os.Getenv("KEPR_CI") == "true"
+	if ciMode {
+		slog.Debug("CI mode enabled: prompts will be auto-confirmed")
+	}
+	return &Terminal{
+		ciMode: ciMode,
+	}
 }
 
 func (t *Terminal) Confirm(prompt string) (bool, error) {
 	slog.Debug("cout: confirm prompt", "message", prompt)
+	if t.ciMode {
+		slog.Debug("CI mode: auto-confirming", "prompt", prompt)
+		return true, nil
+	}
 	result, err := pterm.DefaultInteractiveConfirm.Show(prompt)
 	if err != nil {
 		slog.Error("confirm prompt failed", "error", err)
@@ -57,6 +70,10 @@ func (t *Terminal) Confirm(prompt string) (bool, error) {
 
 func (t *Terminal) Input(prompt string, defaultValue string) (string, error) {
 	slog.Debug("cout: input prompt", "message", prompt, "default", defaultValue)
+	if t.ciMode {
+		slog.Debug("CI mode: using default value", "prompt", prompt, "value", defaultValue)
+		return defaultValue, nil
+	}
 	result, err := pterm.DefaultInteractiveTextInput.WithDefaultValue(defaultValue).Show(prompt)
 	if err != nil {
 		slog.Error("input prompt failed", "error", err)
@@ -68,6 +85,20 @@ func (t *Terminal) Input(prompt string, defaultValue string) (string, error) {
 
 func (t *Terminal) InputPassword(prompt string) (string, error) {
 	slog.Debug("cout: password input prompt", "message", prompt)
+
+	if t.ciMode {
+		slog.Debug("CI mode: reading password from stdin")
+		var password string
+		_, err := fmt.Scanln(&password)
+		if err != nil {
+			slog.Error("failed to read password from stdin", "error", err)
+			return "", fmt.Errorf("CI mode: failed to read password from stdin: %w", err)
+		}
+		if password == "" {
+			return "", fmt.Errorf("CI mode: password cannot be empty")
+		}
+		return password, nil
+	}
 
 	maxAttempts := 5
 	for attempt := 1; attempt <= maxAttempts; attempt++ {

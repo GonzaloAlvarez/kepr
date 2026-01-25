@@ -19,6 +19,7 @@ package gpg
 import (
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 )
@@ -48,8 +49,13 @@ func (g *GPG) Decrypt(data []byte) ([]byte, error) {
 	slog.Debug("decrypting data", "size", len(data))
 
 	userPin := config.GetYubikeyUserPin()
+	ciMode := os.Getenv("KEPR_CI") == "true"
 
-	if userPin != "" && userPin != "manual" {
+	if ciMode && (userPin == "" || userPin == "manual") {
+		userPin = ""
+	}
+
+	if ciMode || (userPin != "" && userPin != "manual") {
 		slog.Debug("using automated decryption with loopback pinentry")
 		args := []string{
 			"--decrypt",

@@ -18,6 +18,7 @@ package get
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/gonzaloalvarez/kepr/internal/add"
 	"github.com/gonzaloalvarez/kepr/pkg/config"
@@ -67,14 +68,16 @@ func Execute(key, repoPath string, githubClient github.Client, executor shell.Ex
 		return fmt.Errorf("failed to initialize gpg: %w", err)
 	}
 
-	userPin := config.GetYubikeyUserPin()
-	if userPin != "" && userPin != "manual" {
-		y := gpg.NewYubikey(g)
+	if os.Getenv("KEPR_CI") != "true" {
+		userPin := config.GetYubikeyUserPin()
+		if userPin != "" && userPin != "manual" {
+			y := gpg.NewYubikey(g)
 
-		y.KillSCDaemon()
+			y.KillSCDaemon()
 
-		if y.CheckCardPresent() != nil {
-			return fmt.Errorf("no yubikey detected")
+			if y.CheckCardPresent() != nil {
+				return fmt.Errorf("no yubikey detected")
+			}
 		}
 	}
 

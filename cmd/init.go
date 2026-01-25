@@ -95,8 +95,10 @@ func NewInitCmd(app *App) *cobra.Command {
 				return fmt.Errorf("failed to commit initial store: %w", err)
 			}
 
-			repoOwner := github.ExtractRepoOwner(repo)
-			remoteURL := fmt.Sprintf("https://github.com/%s/%s.git", repoOwner, repoName)
+			remoteURL, err := app.GitHub.GetCloneURL(repoName)
+			if err != nil {
+				return fmt.Errorf("failed to get clone URL: %w", err)
+			}
 
 			if err := gitClient.ConfigureRemote(secretsPath, "origin", remoteURL); err != nil {
 				return fmt.Errorf("failed to configure git remote: %w", err)

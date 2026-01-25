@@ -25,4 +25,5 @@ type Client interface {
 	GetUserIdentity() (name string, email string, err error)
 	CheckRepoExists(name string) (bool, error)
 	CreateRepo(name string) error
+	GetCloneURL(name string) (string, error)
 }

@@ -28,6 +28,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -37,6 +38,16 @@ import (
 	"github.com/google/go-github/v67/github"
 	"golang.org/x/oauth2"
 )
+
+const defaultGitHubHost = "https://github.com"
+
+func getGitHubHost() string {
+	if host := os.Getenv("GITHUB_HOST"); host != "" {
+		slog.Debug("using custom GITHUB_HOST", "host", host)
+		return strings.TrimSuffix(host, "/")
+	}
+	return defaultGitHubHost
+}
 
 type GitHubClient struct {
 	client *github.Client
@@ -57,8 +68,12 @@ func (c *GitHubClient) CodeBasedAuthentication(clientID string, io cout.IO) (str
 		scopes = append(scopes, "delete_repo")
 	}
 
-	slog.Debug("requesting device code", "scopes", scopes)
-	code, err := device.RequestCode(httpClient, "https://github.com/login/device/code", clientID, scopes)
+	host := getGitHubHost()
+	deviceCodeURL := host + "/login/device/code"
+	tokenURL := host + "/login/oauth/access_token"
+
+	slog.Debug("requesting device code", "scopes", scopes, "url", deviceCodeURL)
+	code, err := device.RequestCode(httpClient, deviceCodeURL, clientID, scopes)
 	if err != nil {
 		slog.Error("failed to request device code", "error", err)
 		return "", err
@@ -66,8 +81,8 @@ func (c *GitHubClient) CodeBasedAuthentication(clientID string, io cout.IO) (str
 	io.Infofln("Please visit: %s", code.VerificationURI)
 	io.Infofln("Enter code: %s", code.UserCode)
 
-	slog.Debug("waiting for user authentication")
-	accessToken, err := device.Wait(c.ctx, httpClient, "https://github.com/login/oauth/access_token", device.WaitOptions{
+	slog.Debug("waiting for user authentication", "tokenURL", tokenURL)
+	accessToken, err := device.Wait(c.ctx, httpClient, tokenURL, device.WaitOptions{
 		ClientID:   clientID,
 		DeviceCode: code,
 	})
@@ -217,7 +232,8 @@ func (c *GitHubClient) PKCEAuthentication(clientID, clientSecret string, io cout
 	params.Add("code_challenge_method", "S256")
 	params.Add("state", state)
 
-	authURL := fmt.Sprintf("https://github.com/login/oauth/authorize?%s", params.Encode())
+	host := getGitHubHost()
+	authURL := fmt.Sprintf("%s/login/oauth/authorize?%s", host, params.Encode())
 
 	io.Infofln("Please visit the following URL to authorize:")
 	io.Infofln("%s", authURL)
@@ -254,7 +270,8 @@ func (c *GitHubClient) PKCEAuthentication(clientID, clientSecret string, io cout
 	tokenParams.Add("redirect_uri", fmt.Sprintf("http://127.0.0.1:%d/callback", cs.port))
 	tokenParams.Add("code_verifier", codeVerifier)
 
-	req, err := http.NewRequestWithContext(c.ctx, "POST", "https://github.com/login/oauth/access_token", strings.NewReader(tokenParams.Encode()))
+	tokenURL := host + "/login/oauth/access_token"
+	req, err := http.NewRequestWithContext(c.ctx, "POST", tokenURL, strings.NewReader(tokenParams.Encode()))
 	if err != nil {
 		slog.Error("failed to create token request", "error", err)
 		return "", fmt.Errorf("failed to create token request: %w", err)
@@ -307,6 +324,16 @@ func (c *GitHubClient) SetToken(token string) {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(c.ctx, ts)
 	c.client = github.NewClient(tc)
+
+	if host := os.Getenv("GITHUB_HOST"); host != "" {
+		baseURL, err := url.Parse(strings.TrimSuffix(host, "/") + "/")
+		if err == nil {
+			c.client.BaseURL = baseURL
+			slog.Debug("configured custom GitHub API base URL", "url", baseURL.String())
+		} else {
+			slog.Warn("failed to parse GITHUB_HOST as URL", "host", host, "error", err)
+		}
+	}
 }
 
 func (c *GitHubClient) GetUserIdentity() (string, string, error) {

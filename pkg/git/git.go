@@ -19,12 +19,14 @@ package git
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
@@ -52,6 +54,21 @@ func (g *Git) getAuth() *http.BasicAuth {
 		Username: "x-access-token",
 		Password: g.AuthToken,
 	}
+}
+
+func (g *Git) getAuthForRemote(repo *git.Repository, remoteName string) transport.AuthMethod {
+	remote, err := repo.Remote(remoteName)
+	if err != nil {
+		return g.getAuth()
+	}
+
+	urls := remote.Config().URLs
+	if len(urls) > 0 && strings.HasPrefix(urls[0], "file://") {
+		slog.Debug("file:// URL detected, skipping auth", "url", urls[0])
+		return nil
+	}
+
+	return g.getAuth()
 }
 
 func (g *Git) Init(repoPath string) error {
@@ -149,7 +166,7 @@ func (g *Git) Push(repoPath, remoteName, branch string) error {
 
 	err = repo.Push(&git.PushOptions{
 		RemoteName: remoteName,
-		Auth:       g.getAuth(),
+		Auth:       g.getAuthForRemote(repo, remoteName),
 	})
 	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return fmt.Errorf("failed to push: %w", err)
@@ -171,7 +188,7 @@ func (g *Git) Pull(repoPath, remoteName, branch string, silent bool) error {
 	err = repo.Fetch(&git.FetchOptions{
 		RemoteName: remoteName,
 		RefSpecs:   []config.RefSpec{refSpec},
-		Auth:       g.getAuth(),
+		Auth:       g.getAuthForRemote(repo, remoteName),
 	})
 	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return fmt.Errorf("failed to fetch: %w", err)

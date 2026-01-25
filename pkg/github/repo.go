@@ -17,8 +17,11 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package github
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/go-github/v67/github"
@@ -95,4 +98,63 @@ func (c *GitHubClient) CreateRepo(name string) error {
 
 	slog.Debug("repository created successfully", "name", name, "private", true)
 	return nil
+}
+
+// This is used primarily for CI testing.
+func (c *GitHubClient) GetCloneURL(name string) (string, error) {
+	slog.Debug("getting clone URL for repository", "name", name)
+
+	if host := os.Getenv("GITHUB_HOST"); host != "" {
+		owner, _, err := c.client.Users.Get(c.ctx, "")
+		if err != nil {
+			slog.Error("failed to get current user", "error", err)
+			return "", fmt.Errorf("failed to get current user: %w", err)
+		}
+
+		ownerLogin := ""
+		if owner.Login != nil {
+			ownerLogin = *owner.Login
+		}
+
+		cloneURLEndpoint := fmt.Sprintf("%s/repos/%s/%s/clone-url", strings.TrimSuffix(host, "/"), ownerLogin, name)
+		slog.Debug("querying clone URL endpoint", "url", cloneURLEndpoint)
+
+		resp, err := http.Get(cloneURLEndpoint)
+		if err != nil {
+			slog.Error("failed to query clone URL", "error", err)
+			return "", fmt.Errorf("failed to query clone URL: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			slog.Error("clone URL endpoint returned error", "status", resp.StatusCode)
+			return "", fmt.Errorf("clone URL endpoint returned status %d", resp.StatusCode)
+		}
+
+		var result struct {
+			CloneURL string `json:"clone_url"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			slog.Error("failed to decode clone URL response", "error", err)
+			return "", fmt.Errorf("failed to decode clone URL response: %w", err)
+		}
+
+		slog.Debug("got clone URL from fake server", "url", result.CloneURL)
+		return result.CloneURL, nil
+	}
+
+	owner, _, err := c.client.Users.Get(c.ctx, "")
+	if err != nil {
+		slog.Error("failed to get current user", "error", err)
+		return "", fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	ownerLogin := ""
+	if owner.Login != nil {
+		ownerLogin = *owner.Login
+	}
+
+	cloneURL := fmt.Sprintf("%s/%s/%s.git", defaultGitHubHost, ownerLogin, name)
+	slog.Debug("constructed clone URL", "url", cloneURL)
+	return cloneURL, nil
 }

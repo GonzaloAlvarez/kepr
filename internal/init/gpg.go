@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
@@ -83,6 +84,12 @@ func SetupGPG(executor shell.Executor, io cout.IO) (*gpg.GPG, error) {
 }
 
 func initYubikey(g *gpg.GPG, io cout.IO) error {
+	if os.Getenv("KEPR_CI") == "true" {
+		slog.Debug("CI mode: skipping YubiKey provisioning")
+		io.Infoln("CI mode: Skipping YubiKey (using software GPG keys)")
+		return nil
+	}
+
 	slog.Debug("checking for YubiKey")
 
 	if err := g.ReplaceSCDaemonConf(); err != nil {

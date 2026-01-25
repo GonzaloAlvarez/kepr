@@ -1,4 +1,4 @@
-.PHONY: build clean dev test nuke
+.PHONY: build clean dev test nuke e2e fake-server
 
 VERSION ?= dev
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -116,4 +116,18 @@ nuke:
 	echo "Removing config directory..."; \
 	rm -rf "$$CONFIG_DIR"; \
 	echo "Nuke complete"
+
+fake-server:
+	@echo "Building fake GitHub server..."
+	@mkdir -p bin
+	@go build -o bin/fakeghserver ./tests/fakeghserver/cmd
+	@echo "Build complete: ./bin/fakeghserver"
+
+e2e: dev fake-server
+	@echo "Running E2E tests with fake GitHub server..."
+	@./scripts/e2e-test.sh
+
+e2e-go:
+	@echo "Running Go E2E tests..."
+	@KEPR_CI=true go test -v -run TestE2E ./tests/...
 
