@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
@@ -111,6 +112,7 @@ type MockCmd struct {
 	stdout       io.Writer
 	stderr       io.Writer
 	stdinContent string
+	extraFiles   []*os.File
 }
 
 func (c *MockCmd) SetDir(dir string) {
@@ -136,6 +138,27 @@ func (c *MockCmd) SetStdout(w io.Writer) {
 
 func (c *MockCmd) SetStderr(w io.Writer) {
 	c.stderr = w
+}
+
+func (c *MockCmd) GetEnv(key string) string {
+	for _, env := range c.env {
+		if len(env) > len(key) && env[:len(key)+1] == key+"=" {
+			return env[len(key)+1:]
+		}
+	}
+	return ""
+}
+
+func (c *MockCmd) SetExtraFiles(files []*os.File) {
+	c.extraFiles = files
+}
+
+func (c *MockCmd) Start() error {
+	return nil
+}
+
+func (c *MockCmd) Wait() error {
+	return c.Run()
 }
 
 func (c *MockCmd) Run() error {

@@ -24,11 +24,13 @@ import (
 )
 
 type MockIO struct {
-	ConfirmResult bool
-	ConfirmError  error
-	InputResult   string
-	InputError    error
-	Messages      []string
+	ConfirmResult       bool
+	ConfirmError        error
+	InputResult         string
+	InputError          error
+	InputPasswordResult string
+	InputPasswordError  error
+	Messages            []string
 }
 
 func NewMockIO() *MockIO {
@@ -45,6 +47,11 @@ func (m *MockIO) Confirm(prompt string) (bool, error) {
 func (m *MockIO) Input(prompt string, defaultValue string) (string, error) {
 	m.Messages = append(m.Messages, fmt.Sprintf("Input: %s (default: %s)", prompt, defaultValue))
 	return m.InputResult, m.InputError
+}
+
+func (m *MockIO) InputPassword(prompt string) (string, error) {
+	m.Messages = append(m.Messages, fmt.Sprintf("InputPassword: %s", prompt))
+	return m.InputPasswordResult, m.InputPasswordError
 }
 
 func (m *MockIO) Info(a ...interface{}) {

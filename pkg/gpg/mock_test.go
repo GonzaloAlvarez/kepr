@@ -27,8 +27,14 @@ import (
 )
 
 type MockExecutor struct {
-	Calls     []MockCall
-	Responses map[string]MockResponse
+	Calls             []MockCall
+	Responses         map[string]MockResponse
+	LookPathResponses map[string]LookPathResponse
+}
+
+type LookPathResponse struct {
+	Path string
+	Err  error
 }
 
 type MockCall struct {
@@ -45,13 +51,21 @@ type MockResponse struct {
 
 func NewMockExecutor() *MockExecutor {
 	return &MockExecutor{
-		Calls:     []MockCall{},
-		Responses: make(map[string]MockResponse),
+		Calls:             []MockCall{},
+		Responses:         make(map[string]MockResponse),
+		LookPathResponses: make(map[string]LookPathResponse),
 	}
 }
 
 func (m *MockExecutor) LookPath(file string) (string, error) {
-	return file, nil
+	if resp, ok := m.LookPathResponses[file]; ok {
+		return resp.Path, resp.Err
+	}
+	return "/usr/bin/" + file, nil
+}
+
+func (m *MockExecutor) AddLookPathResponse(file, path string, err error) {
+	m.LookPathResponses[file] = LookPathResponse{Path: path, Err: err}
 }
 
 func (m *MockExecutor) Command(name string, args ...string) shell.Cmd {

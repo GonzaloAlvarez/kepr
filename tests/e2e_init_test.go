@@ -1,3 +1,5 @@
+//go:build e2e
+
 package tests
 
 import (
@@ -33,7 +35,7 @@ func TestInit_HappyPath(t *testing.T) {
 
 	mockShell.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
 	mockShell.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
-		"fpr:::::::::ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234:\n", "", nil)
+		"fpr:::::::::ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234:\nuid:-::::::::Test User <test@example.com>:\n", "", nil)
 	mockShell.AddResponse("/usr/bin/gpg", []string{"--batch", "--pinentry-mode", "loopback", "--passphrase", "",
 		"--quick-add-key", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234", "cv25519", "encr", "0"}, "", "", nil)
 	mockShell.AddResponse("/usr/bin/gpg", []string{"--armor", "--export-secret-key", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234"},
@@ -41,7 +43,7 @@ func TestInit_HappyPath(t *testing.T) {
 	mockShell.AddResponse("/usr/bin/gpg", []string{"--batch", "--yes", "--delete-secret-keys", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234"},
 		"", "", nil)
 
-	mockUI.ConfirmInputs = []bool{true, true}
+	mockUI.ConfirmInputs = []bool{true, true, true, true, true}
 
 	app := &cmd.App{
 		Shell:  mockShell,

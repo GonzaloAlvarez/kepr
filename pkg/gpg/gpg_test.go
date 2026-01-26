@@ -374,3 +374,276 @@ func TestMockExecutor_MultipleCallsSameCommand(t *testing.T) {
 		t.Errorf("expected 2 calls recorded, got %d", len(mockExec.Calls))
 	}
 }
+
+func TestGenerateSCDaemonConf(t *testing.T) {
+	conf := generateSCDaemonConf()
+
+	requiredSettings := []string{
+		"disable-ccid",
+		"pcsc-shared",
+		"card-timeout 5",
+	}
+
+	for _, setting := range requiredSettings {
+		if !strings.Contains(conf, setting) {
+			t.Errorf("expected scdaemon.conf to contain %q", setting)
+		}
+	}
+}
+
+func TestListPublicKeys_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+		"fpr:::::::::FINGERPRINT1234567890123456789012345678:\nuid:-::::::::Test User <test@example.com>:\nfpr:::::::::FINGERPRINT9876543210987654321098765432:\nuid:-::::::::Other User <other@example.com>:\n", "", nil)
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	keys, err := gpg.ListPublicKeys()
+	if err != nil {
+		t.Fatalf("ListPublicKeys() failed: %v", err)
+	}
+
+	if len(keys) != 2 {
+		t.Errorf("expected 2 keys, got %d", len(keys))
+	}
+
+	if keys[0].Fingerprint != "FINGERPRINT1234567890123456789012345678" {
+		t.Errorf("expected fingerprint FINGERPRINT1234567890123456789012345678, got %s", keys[0].Fingerprint)
+	}
+
+	if keys[0].Email != "test@example.com" {
+		t.Errorf("expected email test@example.com, got %s", keys[0].Email)
+	}
+
+	if keys[0].Name != "Test User" {
+		t.Errorf("expected name Test User, got %s", keys[0].Name)
+	}
+}
+
+func TestListPublicKeys_Empty(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"}, "", "", nil)
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	keys, err := gpg.ListPublicKeys()
+	if err != nil {
+		t.Fatalf("ListPublicKeys() failed: %v", err)
+	}
+
+	if len(keys) != 0 {
+		t.Errorf("expected 0 keys, got %d", len(keys))
+	}
+}
+
+func TestListPublicKeys_Error(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+		"", "error", fmt.Errorf("gpg error"))
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	_, err := gpg.ListPublicKeys()
+	if err == nil {
+		t.Fatal("expected ListPublicKeys() to fail")
+	}
+}
+
+func TestBackupMasterKey_Cancelled(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export-secret-key", "FINGERPRINT123"},
+		"-----BEGIN PGP PRIVATE KEY BLOCK-----\nkey content\n-----END PGP PRIVATE KEY BLOCK-----\n", "", nil)
+
+	mockIO := NewMockIO()
+	mockIO.ConfirmResult = false
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         mockIO,
+	}
+
+	err := gpg.BackupMasterKey("FINGERPRINT123")
+	if err == nil {
+		t.Fatal("expected BackupMasterKey() to fail when cancelled")
+	}
+
+	if !strings.Contains(err.Error(), "cancelled by user") {
+		t.Errorf("expected error about cancellation, got: %v", err)
+	}
+}
+
+func TestBackupMasterKey_EmptyKey(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export-secret-key", "FINGERPRINT123"},
+		"", "", nil)
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	err := gpg.BackupMasterKey("FINGERPRINT123")
+	if err == nil {
+		t.Fatal("expected BackupMasterKey() to fail with empty key")
+	}
+
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("expected error about empty key, got: %v", err)
+	}
+}
+
+func TestBackupMasterKey_ExportFails(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export-secret-key", "FINGERPRINT123"},
+		"", "export error", fmt.Errorf("gpg error"))
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	err := gpg.BackupMasterKey("FINGERPRINT123")
+	if err == nil {
+		t.Fatal("expected BackupMasterKey() to fail on export error")
+	}
+
+	if !strings.Contains(err.Error(), "failed to export") {
+		t.Errorf("expected error about export failure, got: %v", err)
+	}
+}
+
+func TestBackupMasterKey_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export-secret-key", "FINGERPRINT123"},
+		"-----BEGIN PGP PRIVATE KEY BLOCK-----\nkey content\n-----END PGP PRIVATE KEY BLOCK-----\n", "", nil)
+
+	mockIO := NewMockIO()
+	mockIO.ConfirmResult = true
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         mockIO,
+	}
+
+	err := gpg.BackupMasterKey("FINGERPRINT123")
+	if err != nil {
+		t.Fatalf("BackupMasterKey() failed: %v", err)
+	}
+}
+
+func TestGenerateKeys_NoKeysAfterGeneration(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"}, "", "", nil)
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	_, err := gpg.GenerateKeys("Test", "test@example.com")
+	if err == nil {
+		t.Fatal("expected GenerateKeys() to fail when no keys found after generation")
+	}
+
+	if !strings.Contains(err.Error(), "no keys found after generation") {
+		t.Errorf("expected error about no keys found, got: %v", err)
+	}
+}
+
+func TestGPGKey_Struct(t *testing.T) {
+	key := GPGKey{
+		Fingerprint: "ABC123",
+		UserID:      "Test User <test@example.com>",
+		Email:       "test@example.com",
+		Name:        "Test User",
+	}
+
+	if key.Fingerprint != "ABC123" {
+		t.Errorf("Fingerprint = %q, want ABC123", key.Fingerprint)
+	}
+	if key.Email != "test@example.com" {
+		t.Errorf("Email = %q, want test@example.com", key.Email)
+	}
+	if key.Name != "Test User" {
+		t.Errorf("Name = %q, want Test User", key.Name)
+	}
+}
+
+func TestMockExecutor_LookPath(t *testing.T) {
+	mockExec := NewMockExecutor()
+
+	path, err := mockExec.LookPath("gpg")
+	if err != nil {
+		t.Fatalf("LookPath() failed: %v", err)
+	}
+
+	if path != "/usr/bin/gpg" {
+		t.Errorf("LookPath(gpg) = %q, want /usr/bin/gpg", path)
+	}
+}
+
+func TestMockExecutor_LookPathWithResponse(t *testing.T) {
+	mockExec := NewMockExecutor()
+	mockExec.AddLookPathResponse("pinentry-mac", "/opt/homebrew/bin/pinentry-mac", nil)
+
+	path, err := mockExec.LookPath("pinentry-mac")
+	if err != nil {
+		t.Fatalf("LookPath() failed: %v", err)
+	}
+
+	if path != "/opt/homebrew/bin/pinentry-mac" {
+		t.Errorf("LookPath(pinentry-mac) = %q, want /opt/homebrew/bin/pinentry-mac", path)
+	}
+}
+
+func TestMockExecutor_LookPathError(t *testing.T) {
+	mockExec := NewMockExecutor()
+	mockExec.AddLookPathResponse("notfound", "", fmt.Errorf("not found"))
+
+	_, err := mockExec.LookPath("notfound")
+	if err == nil {
+		t.Error("expected LookPath() to fail")
+	}
+}
