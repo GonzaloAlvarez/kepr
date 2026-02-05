@@ -67,7 +67,6 @@ func (m *MockGitHub) GetCloneURL(name string) (string, error) {
 	if url, exists := m.CloneURLs[name]; exists {
 		return url, nil
 	}
-	// Return a default file:// URL for testing
 	return fmt.Sprintf("file:///tmp/mock-repos/%s/%s.git", m.UserLogin, name), nil
 }
 

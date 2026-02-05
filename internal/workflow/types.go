@@ -14,26 +14,25 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
-package cmd
+package workflow
 
 import (
-	"github.com/gonzaloalvarez/kepr/internal/add"
-	"github.com/spf13/cobra"
+	"context"
 )
 
-func NewAddCmd(app *App) *cobra.Command {
-	return &cobra.Command{
-		Use:     "add [key]",
-		Aliases: []string{"insert"},
-		Short:   "Add a secret to the store",
-		Args:    cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			repoPath, err := RequireRepo()
-			if err != nil {
-				return err
-			}
-			w := add.NewWorkflow(args[0], repoPath, app.GitHub, app.Shell, app.UI)
-			return w.Run(cmd.Context())
-		},
-	}
+type State string
+
+type Trigger string
+
+type StepFunc func(ctx context.Context) error
+
+type RetryConfig struct {
+	MaxAttempts int
+	PromptRetry func(err error, attempt int) (bool, error)
+}
+
+type StepConfig struct {
+	Name    string
+	Execute StepFunc
+	Retry   *RetryConfig
 }

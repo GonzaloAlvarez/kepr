@@ -23,7 +23,6 @@ import (
 	"strings"
 )
 
-// Cmd is an interface that mirrors exec.Cmd methods needed by the application.
 type Cmd interface {
 	SetDir(dir string)
 	SetEnv(env []string)
@@ -39,13 +38,11 @@ type Cmd interface {
 	CombinedOutput() ([]byte, error)
 }
 
-// Executor is an interface for looking up paths and creating commands.
 type Executor interface {
 	LookPath(file string) (string, error)
 	Command(name string, args ...string) Cmd
 }
 
-// SystemCmd wraps *exec.Cmd to satisfy the Cmd interface.
 type SystemCmd struct {
 	cmd *exec.Cmd
 }
@@ -103,7 +100,6 @@ func (c *SystemCmd) CombinedOutput() ([]byte, error) {
 	return c.cmd.CombinedOutput()
 }
 
-// SystemExecutor implements Executor using the standard os/exec package.
 type SystemExecutor struct{}
 
 func (e *SystemExecutor) LookPath(file string) (string, error) {
