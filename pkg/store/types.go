@@ -10,3 +10,8 @@ type Metadata struct {
 	Path string `json:"path"`
 	Type string `json:"type"`
 }
+
+type Entry struct {
+	Name string
+	Type string
+}
