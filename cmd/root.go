@@ -60,6 +60,7 @@ func NewRootCmd(app *App) *cobra.Command {
 	rootCmd.AddCommand(NewInitCmd(app))
 	rootCmd.AddCommand(NewAddCmd(app))
 	rootCmd.AddCommand(NewGetCmd(app))
+	rootCmd.AddCommand(NewListCmd(app))
 
 	return rootCmd
 }

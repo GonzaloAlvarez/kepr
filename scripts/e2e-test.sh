@@ -82,20 +82,60 @@ echo "=== Running: kepr get aws/main/keys ==="
 RESULT=$(./kepr get aws/main/keys 2>/dev/null)
 
 echo ""
-echo "=== Validation ==="
+echo "=== Validation (get) ==="
 echo "Expected: $TEST_SECRET"
 echo "Got:      $RESULT"
 
-if [ "$RESULT" = "$TEST_SECRET" ]; then
-    echo ""
-    echo "=========================================="
-    echo "  PASS: E2E test completed successfully!"
-    echo "=========================================="
-    exit 0
-else
+if [ "$RESULT" != "$TEST_SECRET" ]; then
     echo ""
     echo "=========================================="
     echo "  FAIL: Secret mismatch!"
     echo "=========================================="
     exit 1
 fi
+echo "PASS: Secret matches"
+
+echo ""
+echo "=== Running: kepr list ==="
+LIST_ROOT=$(./kepr list 2>/dev/null)
+echo "List output:"
+echo "$LIST_ROOT"
+
+if echo "$LIST_ROOT" | grep -q "aws/"; then
+    echo "PASS: Found aws/ directory in root"
+else
+    echo "FAIL: Expected aws/ in list output"
+    exit 1
+fi
+
+echo ""
+echo "=== Running: kepr list aws ==="
+LIST_AWS=$(./kepr list aws 2>/dev/null)
+echo "List output:"
+echo "$LIST_AWS"
+
+if echo "$LIST_AWS" | grep -q "main/"; then
+    echo "PASS: Found main/ directory in aws"
+else
+    echo "FAIL: Expected main/ in list aws output"
+    exit 1
+fi
+
+echo ""
+echo "=== Running: kepr list aws/main ==="
+LIST_AWS_MAIN=$(./kepr list aws/main 2>/dev/null)
+echo "List output:"
+echo "$LIST_AWS_MAIN"
+
+if echo "$LIST_AWS_MAIN" | grep -q "keys"; then
+    echo "PASS: Found keys secret in aws/main"
+else
+    echo "FAIL: Expected keys in list aws/main output"
+    exit 1
+fi
+
+echo ""
+echo "=========================================="
+echo "  PASS: E2E test completed successfully!"
+echo "=========================================="
+exit 0

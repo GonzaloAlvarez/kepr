@@ -126,6 +126,84 @@ func TestE2E_InitAddGet_WithFakeServer(t *testing.T) {
 			t.Errorf("expected output to contain %q, got %q", expectedSecret, output)
 		}
 	})
+
+	t.Run("list_root", func(t *testing.T) {
+		oldStdout := os.Stdout
+		defer func() { os.Stdout = oldStdout }()
+
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		rootCmd := cmd.NewRootCmd(app)
+		rootCmd.SetArgs([]string{"list"})
+
+		err := rootCmd.Execute()
+
+		w.Close()
+		var buf bytes.Buffer
+		buf.ReadFrom(r)
+		output := buf.String()
+
+		if err != nil {
+			t.Fatalf("list failed: %v", err)
+		}
+
+		if !strings.Contains(output, "aws/") {
+			t.Errorf("expected output to contain 'aws/', got %q", output)
+		}
+	})
+
+	t.Run("list_aws", func(t *testing.T) {
+		oldStdout := os.Stdout
+		defer func() { os.Stdout = oldStdout }()
+
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		rootCmd := cmd.NewRootCmd(app)
+		rootCmd.SetArgs([]string{"list", "aws"})
+
+		err := rootCmd.Execute()
+
+		w.Close()
+		var buf bytes.Buffer
+		buf.ReadFrom(r)
+		output := buf.String()
+
+		if err != nil {
+			t.Fatalf("list aws failed: %v", err)
+		}
+
+		if !strings.Contains(output, "main/") {
+			t.Errorf("expected output to contain 'main/', got %q", output)
+		}
+	})
+
+	t.Run("list_aws_main", func(t *testing.T) {
+		oldStdout := os.Stdout
+		defer func() { os.Stdout = oldStdout }()
+
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		rootCmd := cmd.NewRootCmd(app)
+		rootCmd.SetArgs([]string{"list", "aws/main"})
+
+		err := rootCmd.Execute()
+
+		w.Close()
+		var buf bytes.Buffer
+		buf.ReadFrom(r)
+		output := buf.String()
+
+		if err != nil {
+			t.Fatalf("list aws/main failed: %v", err)
+		}
+
+		if !strings.Contains(output, "keys") {
+			t.Errorf("expected output to contain 'keys', got %q", output)
+		}
+	})
 }
 
 func TestE2E_FakeServer_OAuthFlow(t *testing.T) {

@@ -94,3 +94,15 @@ func (p *Pass) Get(key string) error {
 	slog.Debug("secret retrieved successfully")
 	return nil
 }
+
+func (p *Pass) List(path string) ([]store.Entry, error) {
+	slog.Debug("listing entries from password store", "path", path)
+
+	entries, err := p.store.List(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list entries: %w", err)
+	}
+
+	slog.Debug("entries listed successfully", "count", len(entries))
+	return entries, nil
+}
