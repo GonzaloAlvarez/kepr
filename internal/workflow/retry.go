@@ -14,26 +14,39 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
-package cmd
+package workflow
 
 import (
-	"github.com/gonzaloalvarez/kepr/internal/add"
-	"github.com/spf13/cobra"
+	"context"
+	"fmt"
 )
 
-func NewAddCmd(app *App) *cobra.Command {
-	return &cobra.Command{
-		Use:     "add [key]",
-		Aliases: []string{"insert"},
-		Short:   "Add a secret to the store",
-		Args:    cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			repoPath, err := RequireRepo()
-			if err != nil {
-				return err
-			}
-			w := add.NewWorkflow(args[0], repoPath, app.GitHub, app.Shell, app.UI)
-			return w.Run(cmd.Context())
-		},
+func ExecuteWithRetry(ctx context.Context, cfg StepConfig) error {
+	if cfg.Retry == nil || cfg.Retry.MaxAttempts <= 1 {
+		return cfg.Execute(ctx)
 	}
+
+	var lastErr error
+	for attempt := 1; attempt <= cfg.Retry.MaxAttempts; attempt++ {
+		lastErr = cfg.Execute(ctx)
+		if lastErr == nil {
+			return nil
+		}
+
+		if attempt >= cfg.Retry.MaxAttempts {
+			break
+		}
+
+		if cfg.Retry.PromptRetry != nil {
+			retry, promptErr := cfg.Retry.PromptRetry(lastErr, attempt)
+			if promptErr != nil {
+				return promptErr
+			}
+			if !retry {
+				return lastErr
+			}
+		}
+	}
+
+	return fmt.Errorf("failed after %d attempts: %w", cfg.Retry.MaxAttempts, lastErr)
 }

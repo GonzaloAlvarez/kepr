@@ -31,7 +31,8 @@ func NewGetCmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return get.Execute(args[0], repoPath, app.GitHub, app.Shell, app.UI)
+			w := get.NewWorkflow(args[0], repoPath, app.GitHub, app.Shell, app.UI)
+			return w.Run(cmd.Context())
 		},
 	}
 }
