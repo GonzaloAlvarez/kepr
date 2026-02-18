@@ -62,10 +62,10 @@ The `github_app_credentials.env` file is gitignored and will never be committed.
 ## Usage
 
 ### Initialization (Onboarding)
-The init process handles GitHub authentication, GPG key generation, YubiKey provisioning, and secure cold-storage backup automatically.
+The init process handles GitHub authentication, GPG key generation, YubiKey provisioning, and secure cold-storage backup automatically. The store is created under your GitHub user. Repo name is optional (default: `kepr-store`).
 
 ```bash
-$ kepr init [github_username]/kepr-secrets
+$ kepr init [repo-name]
 ```
 
 ### Managing Secrets

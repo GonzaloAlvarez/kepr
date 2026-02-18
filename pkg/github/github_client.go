@@ -386,3 +386,17 @@ func (c *GitHubClient) GetUserIdentity() (string, string, error) {
 	slog.Debug("user identity fetched", "name", name, "email", email)
 	return name, email, nil
 }
+
+func (c *GitHubClient) GetCurrentUserLogin() (string, error) {
+	slog.Debug("fetching current user login from GitHub")
+	user, _, err := c.client.Users.Get(c.ctx, "")
+	if err != nil {
+		slog.Error("failed to fetch current user", "error", err)
+		return "", fmt.Errorf("failed to fetch current user: %w", err)
+	}
+	if user.Login == nil || *user.Login == "" {
+		return "", fmt.Errorf("user login not found")
+	}
+	slog.Debug("current user login fetched", "login", *user.Login)
+	return *user.Login, nil
+}

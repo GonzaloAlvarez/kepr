@@ -53,6 +53,13 @@ func (m *MockGitHub) GetUserIdentity() (string, string, error) {
 	return m.UserName, m.UserEmail, nil
 }
 
+func (m *MockGitHub) GetCurrentUserLogin() (string, error) {
+	if m.UserLogin == "" {
+		return "", fmt.Errorf("mock: user login not configured")
+	}
+	return m.UserLogin, nil
+}
+
 func (m *MockGitHub) CheckRepoExists(name string) (bool, error) {
 	_, exists := m.Repos[name]
 	return exists, nil

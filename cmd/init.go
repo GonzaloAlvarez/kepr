@@ -17,19 +17,29 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
+	"fmt"
+	"strings"
+
 	initialize "github.com/gonzaloalvarez/kepr/internal/init"
-	"github.com/gonzaloalvarez/kepr/pkg/github"
 	"github.com/spf13/cobra"
 )
 
+const defaultInitRepoName = "kepr-store"
+
 func NewInitCmd(app *App) *cobra.Command {
 	return &cobra.Command{
-		Use:   "init [username/repo]",
+		Use:   "init [repo-name]",
 		Short: "Initialize a new kepr repository",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			repo := github.NormalizeRepoPath(args[0])
-			w := initialize.NewWorkflow(repo, app.GitHub, app.Shell, app.UI)
+			repoName := defaultInitRepoName
+			if len(args) > 0 {
+				repoName = args[0]
+				if strings.Contains(repoName, "/") {
+					return fmt.Errorf("repo name must not contain '/'")
+				}
+			}
+			w := initialize.NewWorkflow(repoName, app.GitHub, app.Shell, app.UI)
 			return w.Run(cmd.Context())
 		},
 	}

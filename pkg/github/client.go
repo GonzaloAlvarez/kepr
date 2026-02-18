@@ -23,6 +23,7 @@ type Client interface {
 	PKCEAuthentication(clientID, clientSecret string, io cout.IO) (string, error)
 	SetToken(token string)
 	GetUserIdentity() (name string, email string, err error)
+	GetCurrentUserLogin() (string, error)
 	CheckRepoExists(name string) (bool, error)
 	CreateRepo(name string) error
 	GetCloneURL(name string) (string, error)

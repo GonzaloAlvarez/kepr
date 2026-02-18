@@ -62,7 +62,7 @@ func TestE2E_InitAddGet_WithFakeServer(t *testing.T) {
 
 	t.Run("init", func(t *testing.T) {
 		rootCmd := cmd.NewRootCmd(app)
-		rootCmd.SetArgs([]string{"init", "testuser/test-repo"})
+		rootCmd.SetArgs([]string{"init", "test-repo"})
 
 		err := rootCmd.Execute()
 		if err != nil {

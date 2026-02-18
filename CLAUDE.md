@@ -53,7 +53,7 @@ make nuke       # Full reset - deletes GitHub repo, resets YubiKey (dev builds o
 
 ### Data Flow
 
-1. `kepr init` → GitHub OAuth → GPG key generation → YubiKey provisioning → master key backup → store init
+1. `kepr init [repo]` (optional repo name, default kepr-store) → GitHub OAuth → GPG key generation → YubiKey provisioning → master key backup → store init
 2. `kepr add` → encrypt with GPG → store in UUID dir → git commit → push
 3. `kepr get` → git pull → decrypt with YubiKey → output
 

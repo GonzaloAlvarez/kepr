@@ -29,7 +29,7 @@
 `kepr` enforces a strict **Master Key vs. Subkey** architecture to ensure long-term identity security.
 
 #### The "Cold Storage" Model
-During `kepr init`:
+During `kepr init` (optional repo name; owner is the authenticated GitHub user):
 1.  **Generation:** An Ed25519 Master Key (Certify capability only) is generated locally.
 2.  **Subkeys:** Ed25519 Signing and Encryption subkeys are attached to the Master.
 3.  **Backup:** The Master Key is exported, encrypted symmetrically (AES-256) with a user passphrase, and uploaded to a private GitHub repository (`username/kepr-identity-backup`).

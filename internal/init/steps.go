@@ -52,6 +52,11 @@ func (c *Context) stepAuthenticate() workflow.StepConfig {
 			}
 			c.Token = token
 			c.GitHub.SetToken(token)
+			owner, err := c.GitHub.GetCurrentUserLogin()
+			if err != nil {
+				return fmt.Errorf("failed to get current user: %w", err)
+			}
+			c.RepoPath = owner + "/" + c.RepoPath
 			return nil
 		},
 	}

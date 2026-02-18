@@ -52,7 +52,7 @@ func TestInit_HappyPath(t *testing.T) {
 	}
 
 	rootCmd := cmd.NewRootCmd(app)
-	rootCmd.SetArgs([]string{"init", "testuser/testrepo"})
+	rootCmd.SetArgs([]string{"init", "testrepo"})
 
 	err := rootCmd.Execute()
 	if err != nil {

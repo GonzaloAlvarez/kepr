@@ -70,8 +70,8 @@ echo "  KEPR_HOME=$KEPR_HOME"
 TEST_SECRET="my-super-secret-value-12345"
 
 echo ""
-echo "=== Running: kepr init testuser/test-repo ==="
-./kepr init testuser/test-repo
+echo "=== Running: kepr init test-repo ==="
+./kepr init test-repo
 
 echo ""
 echo "=== Running: kepr add aws/main/keys ==="
