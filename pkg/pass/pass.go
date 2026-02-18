@@ -49,10 +49,10 @@ func New(secretsPath string, gpgClient *gpg.GPG, gitClient *git.Git, io cout.IO,
 	}
 }
 
-func (p *Pass) Init(fingerprint string) error {
-	slog.Debug("initializing password store", "path", p.SecretsPath, "fingerprint", fingerprint)
+func (p *Pass) Init(fingerprints []string) error {
+	slog.Debug("initializing password store", "path", p.SecretsPath, "fingerprints", fingerprints)
 
-	if err := p.store.Init(); err != nil {
+	if err := p.store.Init(fingerprints); err != nil {
 		return fmt.Errorf("failed to initialize store: %w", err)
 	}
 

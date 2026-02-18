@@ -191,7 +191,7 @@ func (c *Context) stepInitStore() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "init_store",
 		Execute: func(ctx context.Context) error {
-			st, err := store.New(c.SecretsPath, c.Fingerprint, c.GPG)
+			st, err := store.New(c.SecretsPath, c.GPG)
 			if err != nil {
 				return fmt.Errorf("failed to create store: %w", err)
 			}

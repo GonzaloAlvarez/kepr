@@ -75,9 +75,14 @@ func (s *Store) Add(path string, io cout.IO) (string, error) {
 		return "", fmt.Errorf("failed to generate UUID: %w", err)
 	}
 
+	fingerprints, err := ReadGpgID(currentPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read .gpg.id in target directory: %w", err)
+	}
+
 	slog.Debug("encrypting secret", "uuid", uuid)
 
-	secretEncrypted, err := s.gpg.Encrypt([]byte(secretValue), s.Fingerprint)
+	secretEncrypted, err := s.gpg.Encrypt([]byte(secretValue), fingerprints...)
 	if err != nil {
 		return "", fmt.Errorf("failed to encrypt secret: %w", err)
 	}
@@ -99,7 +104,7 @@ func (s *Store) Add(path string, io cout.IO) (string, error) {
 		return "", fmt.Errorf("failed to serialize metadata: %w", err)
 	}
 
-	metadataEncrypted, err := s.gpg.Encrypt(metadataJSON, s.Fingerprint)
+	metadataEncrypted, err := s.gpg.Encrypt(metadataJSON, fingerprints...)
 	if err != nil {
 		return "", fmt.Errorf("failed to encrypt metadata: %w", err)
 	}

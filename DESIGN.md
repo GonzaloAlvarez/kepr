@@ -23,7 +23,7 @@
 *   **Data Storage (`{KEPR_HOME}/{owner}/{repo}/`)**
     *   UUID-based directory structure where each secret and directory has a unique identifier.
     *   `.git/`: The git repository tracking changes.
-    *   `.gpg.id`: The GPG key fingerprint authorized for decryption.
+    *   `.gpg.id`: GPG key fingerprints authorized for decryption. Present in every directory; each folder can have different recipients (one fingerprint per line, multi-recipient encryption).
 
 ### 3.2 Identity & Key Management
 `kepr` enforces a strict **Master Key vs. Subkey** architecture to ensure long-term identity security.

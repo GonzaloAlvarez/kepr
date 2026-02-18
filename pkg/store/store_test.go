@@ -17,6 +17,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package store
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -213,15 +215,8 @@ func TestMetadataTypes(t *testing.T) {
 	}
 }
 
-func TestNew_EmptyFingerprint(t *testing.T) {
-	_, err := New("/tmp/secrets", "", nil)
-	if err != ErrInvalidFingerprint {
-		t.Errorf("New() with empty fingerprint = %v, want ErrInvalidFingerprint", err)
-	}
-}
-
 func TestNew_NilGPGClient(t *testing.T) {
-	_, err := New("/tmp/secrets", "FINGERPRINT123", nil)
+	_, err := New("/tmp/secrets", nil)
 	if err != ErrInvalidGPGClient {
 		t.Errorf("New() with nil GPG = %v, want ErrInvalidGPGClient", err)
 	}
@@ -230,9 +225,6 @@ func TestNew_NilGPGClient(t *testing.T) {
 func TestStoreErrors(t *testing.T) {
 	if ErrAlreadyInitialized.Error() != "store already initialized" {
 		t.Errorf("ErrAlreadyInitialized message incorrect")
-	}
-	if ErrInvalidFingerprint.Error() != "fingerprint cannot be empty" {
-		t.Errorf("ErrInvalidFingerprint message incorrect")
 	}
 	if ErrInvalidGPGClient.Error() != "gpg client cannot be nil" {
 		t.Errorf("ErrInvalidGPGClient message incorrect")
@@ -245,5 +237,84 @@ func TestStoreErrors(t *testing.T) {
 	}
 	if ErrSecretNotFound.Error() != "secret not found" {
 		t.Errorf("ErrSecretNotFound message incorrect")
+	}
+}
+
+func TestWriteGpgID(t *testing.T) {
+	dir := t.TempDir()
+	fingerprints := []string{"FP_AAA", "FP_BBB"}
+
+	err := WriteGpgID(dir, fingerprints)
+	if err != nil {
+		t.Fatalf("WriteGpgID() returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".gpg.id"))
+	if err != nil {
+		t.Fatalf("failed to read .gpg.id: %v", err)
+	}
+
+	expected := "FP_AAA\nFP_BBB\n"
+	if string(data) != expected {
+		t.Errorf("WriteGpgID content = %q, want %q", string(data), expected)
+	}
+}
+
+func TestWriteGpgID_Empty(t *testing.T) {
+	dir := t.TempDir()
+	err := WriteGpgID(dir, []string{})
+	if err == nil {
+		t.Error("WriteGpgID with empty fingerprints should return error")
+	}
+}
+
+func TestReadGpgID(t *testing.T) {
+	dir := t.TempDir()
+	content := "FP_AAA\nFP_BBB\n"
+	if err := os.WriteFile(filepath.Join(dir, ".gpg.id"), []byte(content), 0600); err != nil {
+		t.Fatalf("failed to write test .gpg.id: %v", err)
+	}
+
+	fps, err := ReadGpgID(dir)
+	if err != nil {
+		t.Fatalf("ReadGpgID() returned error: %v", err)
+	}
+	if len(fps) != 2 {
+		t.Fatalf("ReadGpgID() returned %d fingerprints, want 2", len(fps))
+	}
+	if fps[0] != "FP_AAA" || fps[1] != "FP_BBB" {
+		t.Errorf("ReadGpgID() = %v, want [FP_AAA FP_BBB]", fps)
+	}
+}
+
+func TestReadGpgID_Missing(t *testing.T) {
+	dir := t.TempDir()
+	_, err := ReadGpgID(dir)
+	if err == nil {
+		t.Error("ReadGpgID on missing .gpg.id should return error")
+	}
+}
+
+func TestReadGpgID_Empty(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".gpg.id"), []byte(""), 0600); err != nil {
+		t.Fatalf("failed to write test .gpg.id: %v", err)
+	}
+
+	_, err := ReadGpgID(dir)
+	if err == nil {
+		t.Error("ReadGpgID on empty .gpg.id should return error")
+	}
+}
+
+func TestReadGpgID_WhitespaceOnly(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".gpg.id"), []byte("  \n  \n"), 0600); err != nil {
+		t.Fatalf("failed to write test .gpg.id: %v", err)
+	}
+
+	_, err := ReadGpgID(dir)
+	if err == nil {
+		t.Error("ReadGpgID on whitespace-only .gpg.id should return error")
 	}
 }

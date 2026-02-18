@@ -24,15 +24,17 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 )
 
-func (g *GPG) Encrypt(data []byte, recipient string) ([]byte, error) {
-	slog.Debug("encrypting data", "recipient", recipient, "size", len(data))
+func (g *GPG) Encrypt(data []byte, recipients ...string) ([]byte, error) {
+	slog.Debug("encrypting data", "recipients", recipients, "size", len(data))
 
 	args := []string{
 		"--encrypt",
 		"--armor",
 		"--batch",
 		"--trust-model", "always",
-		"-r", recipient,
+	}
+	for _, r := range recipients {
+		args = append(args, "-r", r)
 	}
 
 	stdout, stderr, err := g.executeBytes(data, args...)

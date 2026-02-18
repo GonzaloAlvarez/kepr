@@ -22,13 +22,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 )
 
 var (
 	ErrAlreadyInitialized  = errors.New("store already initialized")
-	ErrInvalidFingerprint  = errors.New("fingerprint cannot be empty")
 	ErrInvalidGPGClient    = errors.New("gpg client cannot be nil")
 	ErrSecretAlreadyExists = errors.New("secret already exists")
 	ErrStoreNotInitialized = errors.New("store not initialized")
@@ -37,27 +37,54 @@ var (
 
 type Store struct {
 	SecretsPath string
-	Fingerprint string
 	gpg         *gpg.GPG
 }
 
-func New(secretsPath string, fingerprint string, gpgClient *gpg.GPG) (*Store, error) {
-	if fingerprint == "" {
-		return nil, ErrInvalidFingerprint
-	}
+func New(secretsPath string, gpgClient *gpg.GPG) (*Store, error) {
 	if gpgClient == nil {
 		return nil, ErrInvalidGPGClient
 	}
 
 	return &Store{
 		SecretsPath: secretsPath,
-		Fingerprint: fingerprint,
 		gpg:         gpgClient,
 	}, nil
 }
 
-func (s *Store) Init() error {
+func ReadGpgID(dirPath string) ([]string, error) {
+	gpgIDPath := filepath.Join(dirPath, ".gpg.id")
+	data, err := os.ReadFile(gpgIDPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read .gpg.id: %w", err)
+	}
+	var fingerprints []string
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			fingerprints = append(fingerprints, line)
+		}
+	}
+	if len(fingerprints) == 0 {
+		return nil, fmt.Errorf("no fingerprints found in .gpg.id")
+	}
+	return fingerprints, nil
+}
+
+func WriteGpgID(dirPath string, fingerprints []string) error {
+	if len(fingerprints) == 0 {
+		return fmt.Errorf("at least one fingerprint is required")
+	}
+	content := strings.Join(fingerprints, "\n") + "\n"
+	gpgIDPath := filepath.Join(dirPath, ".gpg.id")
+	return os.WriteFile(gpgIDPath, []byte(content), 0600)
+}
+
+func (s *Store) Init(fingerprints []string) error {
 	slog.Debug("initializing store", "path", s.SecretsPath)
+
+	if len(fingerprints) == 0 {
+		return fmt.Errorf("at least one fingerprint is required")
+	}
 
 	gpgIDPath := filepath.Join(s.SecretsPath, ".gpg.id")
 
@@ -72,9 +99,8 @@ func (s *Store) Init() error {
 		return fmt.Errorf("failed to create secrets directory: %w", err)
 	}
 
-	slog.Debug("creating .gpg.id file", "fingerprint", s.Fingerprint)
-	gpgIDContent := s.Fingerprint + "\n"
-	if err := os.WriteFile(gpgIDPath, []byte(gpgIDContent), 0600); err != nil {
+	slog.Debug("creating .gpg.id file", "fingerprints", fingerprints)
+	if err := WriteGpgID(s.SecretsPath, fingerprints); err != nil {
 		return fmt.Errorf("failed to create .gpg.id file: %w", err)
 	}
 
@@ -98,6 +124,11 @@ func (s *Store) findOrCreateDirectory(parentDirPath string, dirName string) (str
 
 	slog.Debug("directory not found, creating new", "name", dirName)
 
+	parentFingerprints, err := ReadGpgID(parentDirPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read parent .gpg.id: %w", err)
+	}
+
 	uuid, err = GenerateUUID()
 	if err != nil {
 		return "", fmt.Errorf("failed to generate UUID: %w", err)
@@ -106,6 +137,10 @@ func (s *Store) findOrCreateDirectory(parentDirPath string, dirName string) (str
 	dirPath := filepath.Join(parentDirPath, uuid)
 	if err := os.MkdirAll(dirPath, 0700); err != nil {
 		return "", fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	if err := WriteGpgID(dirPath, parentFingerprints); err != nil {
+		return "", fmt.Errorf("failed to write .gpg.id: %w", err)
 	}
 
 	metadata := &Metadata{
@@ -118,7 +153,7 @@ func (s *Store) findOrCreateDirectory(parentDirPath string, dirName string) (str
 		return "", fmt.Errorf("failed to serialize metadata: %w", err)
 	}
 
-	metadataEncrypted, err := s.gpg.Encrypt(metadataJSON, s.Fingerprint)
+	metadataEncrypted, err := s.gpg.Encrypt(metadataJSON, parentFingerprints...)
 	if err != nil {
 		return "", fmt.Errorf("failed to encrypt metadata: %w", err)
 	}
