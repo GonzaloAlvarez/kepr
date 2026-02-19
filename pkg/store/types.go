@@ -7,8 +7,9 @@ const (
 )
 
 type Metadata struct {
-	Path string `json:"path"`
-	Type string `json:"type"`
+	Path         string `json:"path"`
+	Type         string `json:"type"`
+	OriginalFile string `json:"original_file,omitempty"`
 }
 
 type Entry struct {

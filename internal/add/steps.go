@@ -38,6 +38,7 @@ type Context struct {
 	GitHub      github.Client
 	RepoPath    string
 	Key         string
+	FilePath    string
 	Token       string
 	ConfigDir   string
 	UserName    string
@@ -164,6 +165,13 @@ func (c *Context) stepAddSecret() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "add_secret",
 		Execute: func(ctx context.Context) error {
+			if c.FilePath != "" {
+				if err := c.Pass.AddFile(c.Key, c.FilePath); err != nil {
+					return err
+				}
+				c.UI.Successfln("File added: %s", c.Key)
+				return nil
+			}
 			if err := c.Pass.Add(c.Key); err != nil {
 				return err
 			}

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
@@ -79,12 +80,54 @@ func (p *Pass) Add(key string) error {
 	return nil
 }
 
-func (p *Pass) Get(key string) error {
+func (p *Pass) AddFile(key string, filePath string) error {
+	slog.Debug("adding file to password store", "key", key, "filePath", filePath)
+
+	fileData, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	if len(fileData) > store.MaxFileSize {
+		return store.ErrFileTooLarge
+	}
+
+	originalFilename := filepath.Base(filePath)
+
+	uuid, err := p.store.AddFile(key, fileData, originalFilename)
+	if err != nil {
+		return fmt.Errorf("failed to add file: %w", err)
+	}
+
+	userName := config.GetUserName()
+	userEmail := config.GetUserEmail()
+
+	if err := p.git.Commit(p.SecretsPath, "updated store with new UUID "+uuid, userName, userEmail); err != nil {
+		return fmt.Errorf("failed to commit changes: %w", err)
+	}
+
+	slog.Debug("file added successfully")
+	return nil
+}
+
+func (p *Pass) Get(key string, outputPath string) error {
 	slog.Debug("getting secret from password store", "key", key)
 
-	secretBytes, err := p.store.Get(key)
+	secretBytes, metadata, err := p.store.Get(key)
 	if err != nil {
 		return fmt.Errorf("failed to get secret: %w", err)
+	}
+
+	if metadata.Type == store.TypeFile {
+		dest := outputPath
+		if dest == "" {
+			dest = metadata.OriginalFile
+		}
+		if err := os.WriteFile(dest, secretBytes, 0600); err != nil {
+			return fmt.Errorf("failed to write file: %w", err)
+		}
+		p.io.Successfln("Created file %s", dest)
+		return nil
 	}
 
 	if _, err := os.Stdout.Write(secretBytes); err != nil {

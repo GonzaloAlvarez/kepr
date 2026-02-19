@@ -95,6 +95,37 @@ if [ "$RESULT" != "$TEST_SECRET" ]; then
 fi
 echo "PASS: Secret matches"
 
+TEST_FILE="$TEST_DIR/test_secret.pem"
+TEST_FILE_CONTENT="-----BEGIN PRIVATE KEY-----
+fake-key-content-for-e2e
+-----END PRIVATE KEY-----"
+echo "$TEST_FILE_CONTENT" > "$TEST_FILE"
+
+echo ""
+echo "=== Running: kepr add ssh/gonzalo/main.ssh (file mode) ==="
+./kepr add ssh/gonzalo/main.ssh "$TEST_FILE"
+
+OUTPUT_FILE="$TEST_DIR/retrieved_key.pem"
+
+echo ""
+echo "=== Running: kepr get ssh/gonzalo/main.ssh -o (file mode) ==="
+./kepr get ssh/gonzalo/main.ssh -o "$OUTPUT_FILE"
+
+echo ""
+echo "=== Validation (get file) ==="
+RETRIEVED_CONTENT=$(cat "$OUTPUT_FILE")
+echo "Expected: $TEST_FILE_CONTENT"
+echo "Got:      $RETRIEVED_CONTENT"
+
+if [ "$RETRIEVED_CONTENT" != "$TEST_FILE_CONTENT" ]; then
+    echo ""
+    echo "=========================================="
+    echo "  FAIL: File content mismatch!"
+    echo "=========================================="
+    exit 1
+fi
+echo "PASS: File content matches"
+
 echo ""
 echo "=== Running: kepr list ==="
 LIST_ROOT=$(./kepr list 2>/dev/null)

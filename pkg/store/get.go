@@ -23,22 +23,22 @@ import (
 	"path/filepath"
 )
 
-func (s *Store) Get(path string) ([]byte, error) {
+func (s *Store) Get(path string) ([]byte, *Metadata, error) {
 	slog.Debug("getting secret", "path", path)
 
 	gpgIDPath := filepath.Join(s.SecretsPath, ".gpg.id")
 	if _, err := os.Stat(gpgIDPath); err != nil {
-		return nil, ErrStoreNotInitialized
+		return nil, nil, ErrStoreNotInitialized
 	}
 
 	normalizedPath, err := NormalizePath(path)
 	if err != nil {
-		return nil, fmt.Errorf("invalid path: %w", err)
+		return nil, nil, fmt.Errorf("invalid path: %w", err)
 	}
 
 	segments := SplitPath(normalizedPath)
 	if len(segments) == 0 {
-		return nil, fmt.Errorf("path cannot be empty")
+		return nil, nil, fmt.Errorf("path cannot be empty")
 	}
 
 	dirSegments := segments[:len(segments)-1]
@@ -50,7 +50,7 @@ func (s *Store) Get(path string) ([]byte, error) {
 	for _, segment := range dirSegments {
 		uuid, err := s.findDirectory(currentPath, segment)
 		if err != nil {
-			return nil, fmt.Errorf("failed to find directory %s: %w", segment, err)
+			return nil, nil, fmt.Errorf("failed to find directory %s: %w", segment, err)
 		}
 		currentPath = filepath.Join(currentPath, uuid)
 	}
@@ -59,7 +59,7 @@ func (s *Store) Get(path string) ([]byte, error) {
 
 	uuid, err := s.findSecret(currentPath, secretName)
 	if err != nil {
-		return nil, ErrSecretNotFound
+		return nil, nil, ErrSecretNotFound
 	}
 
 	secretPath := filepath.Join(currentPath, uuid+".gpg")
@@ -67,14 +67,30 @@ func (s *Store) Get(path string) ([]byte, error) {
 
 	secretEncrypted, err := os.ReadFile(secretPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read secret file: %w", err)
+		return nil, nil, fmt.Errorf("failed to read secret file: %w", err)
 	}
 
 	secretDecrypted, err := s.gpg.Decrypt(secretEncrypted)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt secret: %w", err)
+		return nil, nil, fmt.Errorf("failed to decrypt secret: %w", err)
 	}
 
-	slog.Debug("secret retrieved successfully", "path", normalizedPath)
-	return secretDecrypted, nil
+	metadataPath := filepath.Join(currentPath, uuid+"_md.gpg")
+	metadataEncrypted, err := os.ReadFile(metadataPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read metadata file: %w", err)
+	}
+
+	metadataDecrypted, err := s.gpg.Decrypt(metadataEncrypted)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decrypt metadata: %w", err)
+	}
+
+	metadata, err := DeserializeMetadata(metadataDecrypted)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to deserialize metadata: %w", err)
+	}
+
+	slog.Debug("secret retrieved successfully", "path", normalizedPath, "type", metadata.Type)
+	return secretDecrypted, metadata, nil
 }

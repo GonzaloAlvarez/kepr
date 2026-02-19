@@ -39,6 +39,7 @@ type Context struct {
 	GitHub      github.Client
 	RepoPath    string
 	Key         string
+	OutputPath  string
 	Token       string
 	ConfigDir   string
 	UserName    string
@@ -207,7 +208,7 @@ func (c *Context) stepGetSecret() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "get_secret",
 		Execute: func(ctx context.Context) error {
-			return c.Pass.Get(c.Key)
+			return c.Pass.Get(c.Key, c.OutputPath)
 		},
 	}
 }

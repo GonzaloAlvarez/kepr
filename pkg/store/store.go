@@ -27,12 +27,15 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 )
 
+const MaxFileSize = 1 << 20
+
 var (
 	ErrAlreadyInitialized  = errors.New("store already initialized")
 	ErrInvalidGPGClient    = errors.New("gpg client cannot be nil")
 	ErrSecretAlreadyExists = errors.New("secret already exists")
 	ErrStoreNotInitialized = errors.New("store not initialized")
 	ErrSecretNotFound      = errors.New("secret not found")
+	ErrFileTooLarge        = errors.New("file exceeds maximum size of 1MB")
 )
 
 type Store struct {

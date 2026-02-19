@@ -127,6 +127,69 @@ func TestE2E_InitAddGet_WithFakeServer(t *testing.T) {
 		}
 	})
 
+	t.Run("add_file", func(t *testing.T) {
+		testFile := filepath.Join(tempDir, "test_secret.pem")
+		testContent := "-----BEGIN PRIVATE KEY-----\nfake-key-content\n-----END PRIVATE KEY-----\n"
+		if err := os.WriteFile(testFile, []byte(testContent), 0600); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		rootCmd := cmd.NewRootCmd(app)
+		rootCmd.SetArgs([]string{"add", "ssh/gonzalo/main.ssh", testFile})
+
+		err := rootCmd.Execute()
+		if err != nil {
+			t.Fatalf("add file failed: %v", err)
+		}
+	})
+
+	t.Run("get_file_with_output", func(t *testing.T) {
+		outputFile := filepath.Join(tempDir, "retrieved_key.pem")
+
+		rootCmd := cmd.NewRootCmd(app)
+		rootCmd.SetArgs([]string{"get", "ssh/gonzalo/main.ssh", "-o", outputFile})
+
+		err := rootCmd.Execute()
+		if err != nil {
+			t.Fatalf("get file failed: %v", err)
+		}
+
+		data, err := os.ReadFile(outputFile)
+		if err != nil {
+			t.Fatalf("failed to read output file: %v", err)
+		}
+
+		expectedContent := "-----BEGIN PRIVATE KEY-----\nfake-key-content\n-----END PRIVATE KEY-----\n"
+		if string(data) != expectedContent {
+			t.Errorf("expected file content %q, got %q", expectedContent, string(data))
+		}
+	})
+
+	t.Run("get_file_default_name", func(t *testing.T) {
+		oldWd, _ := os.Getwd()
+		os.Chdir(tempDir)
+		defer os.Chdir(oldWd)
+
+		rootCmd := cmd.NewRootCmd(app)
+		rootCmd.SetArgs([]string{"get", "ssh/gonzalo/main.ssh"})
+
+		err := rootCmd.Execute()
+		if err != nil {
+			t.Fatalf("get file default name failed: %v", err)
+		}
+
+		defaultFile := filepath.Join(tempDir, "test_secret.pem")
+		data, err := os.ReadFile(defaultFile)
+		if err != nil {
+			t.Fatalf("failed to read default output file: %v", err)
+		}
+
+		expectedContent := "-----BEGIN PRIVATE KEY-----\nfake-key-content\n-----END PRIVATE KEY-----\n"
+		if string(data) != expectedContent {
+			t.Errorf("expected file content %q, got %q", expectedContent, string(data))
+		}
+	})
+
 	t.Run("list_root", func(t *testing.T) {
 		oldStdout := os.Stdout
 		defer func() { os.Stdout = oldStdout }()

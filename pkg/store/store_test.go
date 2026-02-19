@@ -318,3 +318,95 @@ func TestReadGpgID_WhitespaceOnly(t *testing.T) {
 		t.Error("ReadGpgID on whitespace-only .gpg.id should return error")
 	}
 }
+
+func TestSerializeDeserializeMetadata_WithOriginalFile(t *testing.T) {
+	original := &Metadata{
+		Path:         "main.ssh",
+		Type:         TypeFile,
+		OriginalFile: "ssh_private_key.pem",
+	}
+
+	data, err := SerializeMetadata(original)
+	if err != nil {
+		t.Fatalf("SerializeMetadata() returned error: %v", err)
+	}
+
+	restored, err := DeserializeMetadata(data)
+	if err != nil {
+		t.Fatalf("DeserializeMetadata() returned error: %v", err)
+	}
+
+	if restored.Path != original.Path {
+		t.Errorf("Path = %q, want %q", restored.Path, original.Path)
+	}
+	if restored.Type != original.Type {
+		t.Errorf("Type = %q, want %q", restored.Type, original.Type)
+	}
+	if restored.OriginalFile != original.OriginalFile {
+		t.Errorf("OriginalFile = %q, want %q", restored.OriginalFile, original.OriginalFile)
+	}
+}
+
+func TestSerializeDeserializeMetadata_OriginalFileOmitted(t *testing.T) {
+	original := &Metadata{
+		Path: "mypassword",
+		Type: TypePassword,
+	}
+
+	data, err := SerializeMetadata(original)
+	if err != nil {
+		t.Fatalf("SerializeMetadata() returned error: %v", err)
+	}
+
+	if strings.Contains(string(data), "original_file") {
+		t.Error("Serialized password metadata should not contain original_file")
+	}
+
+	restored, err := DeserializeMetadata(data)
+	if err != nil {
+		t.Fatalf("DeserializeMetadata() returned error: %v", err)
+	}
+
+	if restored.OriginalFile != "" {
+		t.Errorf("OriginalFile = %q, want empty", restored.OriginalFile)
+	}
+}
+
+func TestMaxFileSize(t *testing.T) {
+	if MaxFileSize != 1<<20 {
+		t.Errorf("MaxFileSize = %d, want %d", MaxFileSize, 1<<20)
+	}
+}
+
+func TestErrFileTooLarge(t *testing.T) {
+	if ErrFileTooLarge.Error() != "file exceeds maximum size of 1MB" {
+		t.Errorf("ErrFileTooLarge message = %q", ErrFileTooLarge.Error())
+	}
+}
+
+func TestAddFile_FileTooLarge(t *testing.T) {
+	dir := t.TempDir()
+	secretsPath := filepath.Join(dir, "secrets")
+	if err := os.MkdirAll(secretsPath, 0700); err != nil {
+		t.Fatalf("failed to create secrets dir: %v", err)
+	}
+	if err := WriteGpgID(secretsPath, []string{"FP_TEST"}); err != nil {
+		t.Fatalf("failed to write .gpg.id: %v", err)
+	}
+
+	st := &Store{SecretsPath: secretsPath}
+	largeData := make([]byte, MaxFileSize+1)
+	_, err := st.AddFile("test/file", largeData, "big.bin")
+	if err != ErrFileTooLarge {
+		t.Errorf("AddFile with oversized data = %v, want ErrFileTooLarge", err)
+	}
+}
+
+func TestAddFile_StoreNotInitialized(t *testing.T) {
+	dir := t.TempDir()
+	st := &Store{SecretsPath: dir}
+	_, err := st.AddFile("test/file", []byte("data"), "test.txt")
+	if err != ErrStoreNotInitialized {
+		t.Errorf("AddFile on uninitialized store = %v, want ErrStoreNotInitialized", err)
+	}
+}

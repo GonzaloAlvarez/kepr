@@ -22,7 +22,7 @@ import (
 )
 
 func NewGetCmd(app *App) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "get [key]",
 		Short: "Retrieve a secret from the store",
 		Args:  cobra.ExactArgs(1),
@@ -31,8 +31,11 @@ func NewGetCmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			w := get.NewWorkflow(args[0], repoPath, app.GitHub, app.Shell, app.UI)
+			outputPath, _ := cmd.Flags().GetString("output")
+			w := get.NewWorkflow(args[0], outputPath, repoPath, app.GitHub, app.Shell, app.UI)
 			return w.Run(cmd.Context())
 		},
 	}
+	cmd.Flags().StringP("output", "o", "", "output file path")
+	return cmd
 }

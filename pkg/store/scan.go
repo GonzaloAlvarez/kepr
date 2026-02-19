@@ -116,7 +116,7 @@ func (s *Store) findSecret(parentPath string, secretName string) (string, error)
 			continue
 		}
 
-		if metadata.Path == secretName && metadata.Type == TypePassword {
+		if metadata.Path == secretName && (metadata.Type == TypePassword || metadata.Type == TypeFile) {
 			slog.Debug("found secret", "uuid", baseFileName, "name", secretName)
 			return baseFileName, nil
 		}
