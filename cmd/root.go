@@ -86,7 +86,7 @@ func GetResolvedRepo() string {
 
 func RequireRepo() (string, error) {
 	if resolvedRepo == "" {
-		return "", fmt.Errorf("no repository specified. Use -r flag or 'kepr use <repo>' to set default")
+		return "", fmt.Errorf("no repository configured. Run 'kepr init' to set up a new store")
 	}
 	return resolvedRepo, nil
 }

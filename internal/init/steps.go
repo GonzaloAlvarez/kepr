@@ -46,6 +46,9 @@ func (c *Context) stepAuthenticate() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "authenticate",
 		Execute: func(ctx context.Context) error {
+			if err := config.EnsureConfigDir(); err != nil {
+				return fmt.Errorf("failed to create config directory: %w", err)
+			}
 			token, err := AuthGithub(c.GitHub, c.UI)
 			if err != nil {
 				return err

@@ -68,9 +68,6 @@ func Dir() (string, error) {
 }
 
 func Init() error {
-	if err := EnsureConfigDir(); err != nil {
-		return err
-	}
 	if err := loadConfig(); err != nil {
 		return err
 	}
