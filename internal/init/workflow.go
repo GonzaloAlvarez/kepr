@@ -25,12 +25,13 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func NewWorkflow(repoName string, gh github.Client, sh shell.Executor, ui cout.IO) *workflow.Workflow {
+func NewWorkflow(repoName string, headless bool, gh github.Client, sh shell.Executor, ui cout.IO) *workflow.Workflow {
 	c := &Context{
 		Shell:    sh,
 		UI:       ui,
 		GitHub:   gh,
 		RepoPath: repoName,
+		Headless: headless,
 	}
 
 	w := workflow.New(StateStart)

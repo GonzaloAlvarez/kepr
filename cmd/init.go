@@ -27,7 +27,7 @@ import (
 const defaultInitRepoName = "kepr-store"
 
 func NewInitCmd(app *App) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "init [repo-name]",
 		Short: "Initialize a new kepr repository",
 		Args:  cobra.MaximumNArgs(1),
@@ -39,8 +39,11 @@ func NewInitCmd(app *App) *cobra.Command {
 					return fmt.Errorf("repo name must not contain '/'")
 				}
 			}
-			w := initialize.NewWorkflow(repoName, app.GitHub, app.Shell, app.UI)
+			headless, _ := cmd.Flags().GetBool("headless")
+			w := initialize.NewWorkflow(repoName, headless, app.GitHub, app.Shell, app.UI)
 			return w.Run(cmd.Context())
 		},
 	}
+	cmd.Flags().Bool("headless", false, "initialize without YubiKey or browser (for remote/VM environments)")
+	return cmd
 }

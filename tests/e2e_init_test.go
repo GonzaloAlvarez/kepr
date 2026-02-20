@@ -104,3 +104,73 @@ func TestInit_HappyPath(t *testing.T) {
 		t.Error("expected repo name in output")
 	}
 }
+
+func TestInit_Headless(t *testing.T) {
+	tempDir := t.TempDir()
+
+	keprHome := filepath.Join(tempDir, "kepr")
+	oldKeprHome := os.Getenv("KEPR_HOME")
+	os.Setenv("KEPR_HOME", keprHome)
+	defer func() {
+		if oldKeprHome != "" {
+			os.Setenv("KEPR_HOME", oldKeprHome)
+		} else {
+			os.Unsetenv("KEPR_HOME")
+		}
+	}()
+
+	mockShell := mocks.NewMockShell()
+	mockUI := mocks.NewMockUI()
+	mockGitHub := mocks.NewMockGitHub("Test User", "test@example.com")
+
+	mockShell.AddResponse("gpg", []string{"--version"}, "gpg (GnuPG) 2.4.0", "", nil)
+	mockShell.AddResponse("git", []string{"--version"}, "git version 2.39.0", "", nil)
+
+	mockShell.AddResponse("/usr/bin/gpg", []string{"--batch", "--gen-key"}, "", "", nil)
+	mockShell.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+		"fpr:::::::::ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234:\nuid:-::::::::Test User <test@example.com>:\n", "", nil)
+	mockShell.AddResponse("/usr/bin/gpg", []string{"--batch", "--pinentry-mode", "loopback", "--passphrase", "",
+		"--quick-add-key", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234", "cv25519", "encr", "0"}, "", "", nil)
+
+	mockUI.ConfirmInputs = []bool{true, true, true, true, true}
+
+	app := &cmd.App{
+		Shell:  mockShell,
+		UI:     mockUI,
+		GitHub: mockGitHub,
+	}
+
+	rootCmd := cmd.NewRootCmd(app)
+	rootCmd.SetArgs([]string{"init", "--headless", "testrepo"})
+
+	err := rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if !mockGitHub.AuthCalled {
+		t.Error("expected GitHub authentication to be called")
+	}
+
+	output := mockUI.GetOutput()
+	if !strings.Contains(output, "Headless mode") {
+		t.Errorf("expected headless mode message, got: %s", output)
+	}
+
+	if strings.Contains(output, "WARNING") && strings.Contains(output, "DELETED") {
+		t.Error("headless mode should not show master key deletion warning")
+	}
+
+	if !mockShell.WasCalled("/usr/bin/gpg", "--batch", "--gen-key") {
+		t.Error("expected gpg key generation in headless mode")
+	}
+
+	configPath := filepath.Join(keprHome, "config.json")
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read config: %v", err)
+	}
+	if !strings.Contains(string(configData), `"headless":true`) && !strings.Contains(string(configData), `"headless": true`) {
+		t.Errorf("expected config to contain headless:true, got: %s", string(configData))
+	}
+}

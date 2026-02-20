@@ -34,6 +34,7 @@ type Context struct {
 	UI          cout.IO
 	GitHub      github.Client
 	RepoPath    string
+	Headless    bool
 	Token       string
 	Fingerprint string
 	GPG         *gpg.GPG
@@ -49,7 +50,7 @@ func (c *Context) stepAuthenticate() workflow.StepConfig {
 			if err := config.EnsureConfigDir(); err != nil {
 				return fmt.Errorf("failed to create config directory: %w", err)
 			}
-			token, err := AuthGithub(c.GitHub, c.UI)
+			token, err := AuthGithub(c.GitHub, c.UI, c.Headless)
 			if err != nil {
 				return err
 			}
@@ -106,7 +107,13 @@ func (c *Context) stepSaveConfig() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "save_config",
 		Execute: func(ctx context.Context) error {
-			return config.SaveGitHubRepo(c.RepoPath)
+			if err := config.SaveGitHubRepo(c.RepoPath); err != nil {
+				return err
+			}
+			if c.Headless {
+				return config.SaveHeadless(true)
+			}
+			return nil
 		},
 	}
 }
@@ -124,7 +131,7 @@ func (c *Context) stepSetupGPG() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "setup_gpg",
 		Execute: func(ctx context.Context) error {
-			g, err := SetupGPG(c.Shell, c.UI)
+			g, err := SetupGPG(c.Shell, c.UI, c.Headless)
 			if err != nil {
 				return err
 			}

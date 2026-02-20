@@ -38,6 +38,7 @@ type GitHub struct {
 
 type Config struct {
 	GitHub          GitHub `json:"github"`
+	Headless        bool   `json:"headless,omitempty"`
 	UserName        string `json:"user_name,omitempty"`
 	UserEmail       string `json:"user_email,omitempty"`
 	UserFingerprint string `json:"user_fingerprint,omitempty"`
@@ -152,6 +153,21 @@ func CheckDependencies() error {
 	}
 
 	return nil
+}
+
+func GetHeadless() bool {
+	if cfg == nil {
+		return false
+	}
+	return cfg.Headless
+}
+
+func SaveHeadless(headless bool) error {
+	if cfg == nil {
+		return fmt.Errorf("config not initialized")
+	}
+	cfg.Headless = headless
+	return saveConfig()
 }
 
 func GetToken() string {

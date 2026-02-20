@@ -31,7 +31,7 @@ var (
 	githubClientSecret = ""
 )
 
-func AuthGithub(client github.Client, io cout.IO) (string, error) {
+func AuthGithub(client github.Client, io cout.IO, headless bool) (string, error) {
 	token := config.GetToken()
 	if token == "" {
 		slog.Debug("no token found locally, starting authentication")
@@ -39,9 +39,11 @@ func AuthGithub(client github.Client, io cout.IO) (string, error) {
 
 		ciMode := os.Getenv("KEPR_CI") == "true"
 
-		if ciMode || githubClientSecret == "" {
+		if ciMode || headless || githubClientSecret == "" {
 			if ciMode {
 				slog.Debug("CI mode: forcing device code flow")
+			} else if headless {
+				slog.Debug("headless mode: forcing device code flow")
 			} else {
 				slog.Debug("client secret not available, using device code flow")
 			}

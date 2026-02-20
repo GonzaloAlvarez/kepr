@@ -29,7 +29,7 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func SetupGPG(executor shell.Executor, io cout.IO) (*gpg.GPG, error) {
+func SetupGPG(executor shell.Executor, io cout.IO, headless bool) (*gpg.GPG, error) {
 	configDir, err := config.Dir()
 	if err != nil {
 		return nil, err
@@ -67,12 +67,16 @@ func SetupGPG(executor shell.Executor, io cout.IO) (*gpg.GPG, error) {
 			return nil, fmt.Errorf("failed to save fingerprint: %w", err)
 		}
 
-		if err := g.BackupMasterKey(fingerprint); err != nil {
-			return nil, fmt.Errorf("failed to process master key: %w", err)
-		}
+		if headless {
+			io.Infoln("Headless mode: master key retained locally (no YubiKey provisioning)")
+		} else {
+			if err := g.BackupMasterKey(fingerprint); err != nil {
+				return nil, fmt.Errorf("failed to process master key: %w", err)
+			}
 
-		if err := initYubikey(g, io); err != nil {
-			return nil, err
+			if err := initYubikey(g, io); err != nil {
+				return nil, err
+			}
 		}
 
 	} else {
