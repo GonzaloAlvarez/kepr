@@ -269,6 +269,112 @@ func TestE2E_InitAddGet_WithFakeServer(t *testing.T) {
 	})
 }
 
+func TestE2E_InitSecondMachine(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping E2E test in short mode")
+	}
+
+	tempDir := t.TempDir()
+	keprHome1 := filepath.Join(tempDir, "kepr-machine1")
+	keprHome2 := filepath.Join(tempDir, "kepr-machine2")
+
+	serverCfg := fakeghserver.DefaultConfig()
+	serverCfg.ReposDir = filepath.Join(tempDir, "repos")
+	server := fakeghserver.New(serverCfg)
+
+	serverURL, err := server.StartBackground()
+	if err != nil {
+		t.Fatalf("failed to start fake server: %v", err)
+	}
+	defer server.Close()
+
+	t.Setenv("KEPR_CI", "true")
+	t.Setenv("GITHUB_HOST", serverURL)
+
+	app := &cmd.App{
+		Shell:  &shell.SystemExecutor{},
+		UI:     cout.NewTerminal(),
+		GitHub: github.NewGitHubClient(),
+	}
+
+	t.Setenv("KEPR_HOME", keprHome1)
+
+	t.Run("machine1_init", func(t *testing.T) {
+		rootCmd := cmd.NewRootCmd(app)
+		rootCmd.SetArgs([]string{"init", "shared-repo"})
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("machine1 init failed: %v", err)
+		}
+
+		secretsPath := filepath.Join(keprHome1, "testuser", "shared-repo")
+		if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
+			t.Fatalf("expected secrets directory at %s", secretsPath)
+		}
+	})
+
+	t.Run("machine1_add_secret", func(t *testing.T) {
+		oldStdin := os.Stdin
+		defer func() { os.Stdin = oldStdin }()
+
+		r, w, _ := os.Pipe()
+		os.Stdin = r
+		go func() {
+			w.WriteString("shared-secret-value\n")
+			w.Close()
+		}()
+
+		rootCmd := cmd.NewRootCmd(app)
+		rootCmd.SetArgs([]string{"add", "team/credentials"})
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("machine1 add failed: %v", err)
+		}
+	})
+
+	t.Setenv("KEPR_HOME", keprHome2)
+
+	t.Run("machine2_init_clone", func(t *testing.T) {
+		rootCmd := cmd.NewRootCmd(app)
+		rootCmd.SetArgs([]string{"init", "shared-repo"})
+
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("machine2 init (clone) failed: %v", err)
+		}
+
+		configPath := filepath.Join(keprHome2, "config.json")
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			t.Errorf("expected config file at %s", configPath)
+		}
+
+		secretsPath := filepath.Join(keprHome2, "testuser", "shared-repo")
+		if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
+			t.Fatalf("expected cloned secrets directory at %s", secretsPath)
+		}
+
+		gpgIDPath := filepath.Join(secretsPath, ".gpg.id")
+		if _, err := os.Stat(gpgIDPath); os.IsNotExist(err) {
+			t.Errorf("expected .gpg.id file in cloned repo at %s", gpgIDPath)
+		}
+
+		entries, err := os.ReadDir(secretsPath)
+		if err != nil {
+			t.Fatalf("failed to read cloned secrets directory: %v", err)
+		}
+
+		hasSubdirs := false
+		for _, entry := range entries {
+			if entry.IsDir() && entry.Name() != ".git" {
+				hasSubdirs = true
+				break
+			}
+		}
+		if !hasSubdirs {
+			t.Error("expected cloned repo to contain secret subdirectories from machine1")
+		}
+	})
+}
+
 func TestE2E_FakeServer_OAuthFlow(t *testing.T) {
 	server := fakeghserver.New(fakeghserver.DefaultConfig())
 

@@ -275,40 +275,134 @@ func TestPull_InvalidRepo(t *testing.T) {
 	}
 }
 
+func createBareRepo(t *testing.T, path string) {
+	t.Helper()
+	repo, err := gogit.PlainInit(path, true)
+	if err != nil {
+		t.Fatalf("Failed to create bare repo: %v", err)
+	}
+	headRef := plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.NewBranchReferenceName("main"))
+	if err := repo.Storer.SetReference(headRef); err != nil {
+		t.Fatalf("Failed to set bare repo HEAD to main: %v", err)
+	}
+}
+
+func TestClone(t *testing.T) {
+	tempDir := t.TempDir()
+
+	bareRepoPath := filepath.Join(tempDir, "bare.git")
+	createBareRepo(t, bareRepoPath)
+
+	srcPath := filepath.Join(tempDir, "src")
+	g := New()
+	if err := g.Init(srcPath); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	testFile := filepath.Join(srcPath, "secret.txt")
+	if err := os.WriteFile(testFile, []byte("secret-data"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	if err := g.Commit(srcPath, "initial commit", "Test", "test@test.com"); err != nil {
+		t.Fatalf("Commit() returned error: %v", err)
+	}
+
+	if err := g.ConfigureRemote(srcPath, "origin", "file://"+bareRepoPath); err != nil {
+		t.Fatalf("ConfigureRemote() returned error: %v", err)
+	}
+
+	if err := g.Push(srcPath, "origin", "main"); err != nil {
+		t.Fatalf("Push() returned error: %v", err)
+	}
+
+	clonePath := filepath.Join(tempDir, "clone")
+	if err := g.Clone("file://"+bareRepoPath, clonePath); err != nil {
+		t.Fatalf("Clone() returned error: %v", err)
+	}
+
+	clonedFile := filepath.Join(clonePath, "secret.txt")
+	data, err := os.ReadFile(clonedFile)
+	if err != nil {
+		t.Fatalf("Failed to read cloned file: %v", err)
+	}
+	if string(data) != "secret-data" {
+		t.Errorf("Cloned file content = %q, want %q", string(data), "secret-data")
+	}
+
+	repo, err := gogit.PlainOpen(clonePath)
+	if err != nil {
+		t.Fatalf("Failed to open cloned repo: %v", err)
+	}
+
+	remote, err := repo.Remote("origin")
+	if err != nil {
+		t.Fatalf("Failed to get remote from cloned repo: %v", err)
+	}
+
+	urls := remote.Config().URLs
+	if len(urls) != 1 || urls[0] != "file://"+bareRepoPath {
+		t.Errorf("Clone remote URLs = %v, want [%q]", urls, "file://"+bareRepoPath)
+	}
+}
+
+func TestClone_InvalidURL(t *testing.T) {
+	tempDir := t.TempDir()
+	clonePath := filepath.Join(tempDir, "clone")
+
+	g := New()
+	err := g.Clone("file:///nonexistent/repo.git", clonePath)
+	if err == nil {
+		t.Error("Clone() with invalid URL should return error")
+	}
+}
+
+func TestClone_DestinationExists(t *testing.T) {
+	tempDir := t.TempDir()
+
+	bareRepoPath := filepath.Join(tempDir, "bare.git")
+	createBareRepo(t, bareRepoPath)
+
+	clonePath := filepath.Join(tempDir, "clone")
+	if err := os.MkdirAll(clonePath, 0755); err != nil {
+		t.Fatalf("Failed to create destination: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(clonePath, ".git"), []byte(""), 0644); err != nil {
+		t.Fatalf("Failed to create .git file: %v", err)
+	}
+
+	g := New()
+	if err := g.Clone("file://"+bareRepoPath, clonePath); err == nil {
+		t.Error("Clone() to existing repo should return error")
+	}
+}
+
 func TestPush_WithLocalFileRemote(t *testing.T) {
 	tempDir := t.TempDir()
 
 	bareRepoPath := filepath.Join(tempDir, "bare.git")
-	_, err := gogit.PlainInit(bareRepoPath, true)
-	if err != nil {
-		t.Fatalf("Failed to create bare repo: %v", err)
-	}
+	createBareRepo(t, bareRepoPath)
 
 	workRepoPath := filepath.Join(tempDir, "work")
 	g := New()
-	err = g.Init(workRepoPath)
-	if err != nil {
+	if err := g.Init(workRepoPath); err != nil {
 		t.Fatalf("Init() returned error: %v", err)
 	}
 
 	testFile := filepath.Join(workRepoPath, "test.txt")
-	err = os.WriteFile(testFile, []byte("test"), 0644)
-	if err != nil {
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	err = g.Commit(workRepoPath, "initial commit", "Test", "test@test.com")
-	if err != nil {
+	if err := g.Commit(workRepoPath, "initial commit", "Test", "test@test.com"); err != nil {
 		t.Fatalf("Commit() returned error: %v", err)
 	}
 
-	err = g.ConfigureRemote(workRepoPath, "origin", "file://"+bareRepoPath)
-	if err != nil {
+	if err := g.ConfigureRemote(workRepoPath, "origin", "file://"+bareRepoPath); err != nil {
 		t.Fatalf("ConfigureRemote() returned error: %v", err)
 	}
 
-	err = g.Push(workRepoPath, "origin", "main")
-	if err != nil {
+	if err := g.Push(workRepoPath, "origin", "main"); err != nil {
 		t.Fatalf("Push() returned error: %v", err)
 	}
 }

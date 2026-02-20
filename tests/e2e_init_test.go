@@ -7,6 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	gogit "github.com/go-git/go-git/v5"
+	gogitconfig "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/gonzaloalvarez/kepr/cmd"
 	"github.com/gonzaloalvarez/kepr/tests/mocks"
@@ -102,6 +108,140 @@ func TestInit_HappyPath(t *testing.T) {
 
 	if !mockUI.HasOutput("testuser/testrepo") {
 		t.Error("expected repo name in output")
+	}
+}
+
+func TestInit_ExistingRepo(t *testing.T) {
+	tempDir := t.TempDir()
+
+	keprHome := filepath.Join(tempDir, "kepr")
+	oldKeprHome := os.Getenv("KEPR_HOME")
+	os.Setenv("KEPR_HOME", keprHome)
+	defer func() {
+		if oldKeprHome != "" {
+			os.Setenv("KEPR_HOME", oldKeprHome)
+		} else {
+			os.Unsetenv("KEPR_HOME")
+		}
+	}()
+
+	bareRepoPath := filepath.Join(tempDir, "bare-repo.git")
+	bareRepo, err := gogit.PlainInit(bareRepoPath, true)
+	if err != nil {
+		t.Fatalf("failed to create bare repo: %v", err)
+	}
+	headRef := plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.NewBranchReferenceName("main"))
+	if err := bareRepo.Storer.SetReference(headRef); err != nil {
+		t.Fatalf("failed to set bare repo HEAD: %v", err)
+	}
+
+	srcPath := filepath.Join(tempDir, "src-repo")
+	srcRepo, err := gogit.PlainInit(srcPath, false)
+	if err != nil {
+		t.Fatalf("failed to create source repo: %v", err)
+	}
+	srcHeadRef := plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.NewBranchReferenceName("main"))
+	if err := srcRepo.Storer.SetReference(srcHeadRef); err != nil {
+		t.Fatalf("failed to set source repo HEAD: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(srcPath, ".gpg.id"), []byte("ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234\n"), 0600); err != nil {
+		t.Fatalf("failed to create .gpg.id: %v", err)
+	}
+	secretDir := filepath.Join(srcPath, "a1b2c3d4-uuid-dir")
+	if err := os.MkdirAll(secretDir, 0700); err != nil {
+		t.Fatalf("failed to create secret dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(secretDir, ".gpg.id"), []byte("ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234\n"), 0600); err != nil {
+		t.Fatalf("failed to create sub .gpg.id: %v", err)
+	}
+
+	w, err := srcRepo.Worktree()
+	if err != nil {
+		t.Fatalf("failed to get worktree: %v", err)
+	}
+	if _, err := w.Add("."); err != nil {
+		t.Fatalf("failed to stage: %v", err)
+	}
+	sig := &object.Signature{Name: "Test", Email: "test@test.com", When: time.Now()}
+	if _, err := w.Commit("initial", &gogit.CommitOptions{Author: sig, Committer: sig}); err != nil {
+		t.Fatalf("failed to commit: %v", err)
+	}
+
+	if _, err := srcRepo.CreateRemote(&gogitconfig.RemoteConfig{Name: "origin", URLs: []string{"file://" + bareRepoPath}}); err != nil {
+		t.Fatalf("failed to add remote: %v", err)
+	}
+	if err := srcRepo.Push(&gogit.PushOptions{RemoteName: "origin"}); err != nil {
+		t.Fatalf("failed to push: %v", err)
+	}
+
+	mockShell := mocks.NewMockShell()
+	mockUI := mocks.NewMockUI()
+	mockGitHub := mocks.NewMockGitHub("Test User", "test@example.com")
+
+	mockGitHub.Repos["testrepo"] = true
+	mockGitHub.CloneURLs["testrepo"] = "file://" + bareRepoPath
+
+	mockShell.AddResponse("gpg", []string{"--version"}, "gpg (GnuPG) 2.4.0", "", nil)
+	mockShell.AddResponse("git", []string{"--version"}, "git version 2.39.0", "", nil)
+
+	mockUI.ConfirmInputs = []bool{true, true, true}
+
+	app := &cmd.App{
+		Shell:  mockShell,
+		UI:     mockUI,
+		GitHub: mockGitHub,
+	}
+
+	rootCmd := cmd.NewRootCmd(app)
+	rootCmd.SetArgs([]string{"init", "testrepo"})
+
+	err = rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if !mockGitHub.AuthCalled {
+		t.Error("expected GitHub authentication to be called")
+	}
+
+	configPath := filepath.Join(keprHome, "config.json")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		t.Errorf("expected config file at %s", configPath)
+	}
+
+	secretsPath := filepath.Join(keprHome, "testuser", "testrepo")
+	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
+		t.Fatalf("expected cloned secrets directory at %s", secretsPath)
+	}
+
+	gpgIDPath := filepath.Join(secretsPath, ".gpg.id")
+	data, err := os.ReadFile(gpgIDPath)
+	if err != nil {
+		t.Fatalf("expected .gpg.id in cloned repo: %v", err)
+	}
+	if !strings.Contains(string(data), "ABCD1234") {
+		t.Errorf("expected .gpg.id to contain fingerprint, got: %s", string(data))
+	}
+
+	clonedSecretDir := filepath.Join(secretsPath, "a1b2c3d4-uuid-dir")
+	if _, err := os.Stat(clonedSecretDir); os.IsNotExist(err) {
+		t.Errorf("expected cloned secret directory at %s", clonedSecretDir)
+	}
+
+	if mockShell.WasCalled("/usr/bin/gpg", "--batch", "--gen-key") {
+		t.Error("GPG key generation should NOT be called when cloning existing repo")
+	}
+
+	output := mockUI.GetOutput()
+	if !strings.Contains(output, "already exists") {
+		t.Errorf("expected 'already exists' message, got: %s", output)
+	}
+	if !strings.Contains(output, "Joined existing repository") {
+		t.Errorf("expected 'Joined existing repository' message, got: %s", output)
+	}
+	if !strings.Contains(output, "Cloned secret store") {
+		t.Errorf("expected 'Cloned secret store' message, got: %s", output)
 	}
 }
 

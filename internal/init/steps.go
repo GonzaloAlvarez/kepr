@@ -35,6 +35,7 @@ type Context struct {
 	GitHub      github.Client
 	RepoPath    string
 	Headless    bool
+	RepoExists  bool
 	Token       string
 	Fingerprint string
 	GPG         *gpg.GPG
@@ -76,7 +77,8 @@ func (c *Context) stepCheckRepo() workflow.StepConfig {
 				return fmt.Errorf("failed to check repository: %w", err)
 			}
 			if exists {
-				return fmt.Errorf("repository '%s' already exists", repoName)
+				c.RepoExists = true
+				c.UI.Infofln("Repository '%s' already exists, will clone it", repoName)
 			}
 			return nil
 		},
@@ -87,6 +89,9 @@ func (c *Context) stepCreateRepo() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "create_repo",
 		Execute: func(ctx context.Context) error {
+			if c.RepoExists {
+				return nil
+			}
 			repoName := github.ExtractRepoName(c.RepoPath)
 			if err := c.GitHub.CreateRepo(repoName); err != nil {
 				return fmt.Errorf("failed to create remote repository: %w", err)
@@ -131,7 +136,7 @@ func (c *Context) stepSetupGPG() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "setup_gpg",
 		Execute: func(ctx context.Context) error {
-			g, err := SetupGPG(c.Shell, c.UI, c.Headless)
+			g, err := SetupGPG(c.Shell, c.UI, c.Headless, c.RepoExists)
 			if err != nil {
 				return err
 			}
@@ -150,6 +155,9 @@ func (c *Context) stepInitStore() workflow.StepConfig {
 			if err != nil {
 				return err
 			}
+			if c.RepoExists {
+				return ClonePasswordStore(configDir, c.RepoPath, c.Token, c.GitHub, c.UI)
+			}
 			return SetupPasswordStore(configDir, c.RepoPath, c.GPG, c.Fingerprint, c.Shell, c.UI)
 		},
 	}
@@ -159,6 +167,9 @@ func (c *Context) stepCommit() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "commit",
 		Execute: func(ctx context.Context) error {
+			if c.RepoExists {
+				return nil
+			}
 			var err error
 			c.SecretsPath, err = config.SecretsPathForRepo(c.RepoPath)
 			if err != nil {
@@ -176,6 +187,9 @@ func (c *Context) stepConfigureRemote() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "configure_remote",
 		Execute: func(ctx context.Context) error {
+			if c.RepoExists {
+				return nil
+			}
 			gitClient := git.NewWithAuth(c.Token)
 			repoName := github.ExtractRepoName(c.RepoPath)
 			remoteURL, err := c.GitHub.GetCloneURL(repoName)
@@ -195,6 +209,9 @@ func (c *Context) stepPush() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "push",
 		Execute: func(ctx context.Context) error {
+			if c.RepoExists {
+				return nil
+			}
 			gitClient := git.NewWithAuth(c.Token)
 			if err := gitClient.Push(c.SecretsPath, "origin", "main"); err != nil {
 				return fmt.Errorf("failed to push to remote: %w", err)

@@ -71,6 +71,26 @@ func (g *Git) getAuthForRemote(repo *git.Repository, remoteName string) transpor
 	return g.getAuth()
 }
 
+func (g *Git) Clone(url, destPath string) error {
+	slog.Debug("cloning repository", "url", url, "dest", destPath)
+
+	auth := g.getAuth()
+	if strings.HasPrefix(url, "file://") {
+		auth = nil
+	}
+
+	_, err := git.PlainClone(destPath, false, &git.CloneOptions{
+		URL:  url,
+		Auth: auth,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to clone repository: %w", err)
+	}
+
+	slog.Debug("repository cloned successfully")
+	return nil
+}
+
 func (g *Git) Init(repoPath string) error {
 	slog.Debug("initializing git repository", "path", repoPath)
 

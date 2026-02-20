@@ -23,11 +23,32 @@ import (
 
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/git"
+	"github.com/gonzaloalvarez/kepr/pkg/github"
 	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/pass"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 	"github.com/gonzaloalvarez/kepr/pkg/store"
 )
+
+func ClonePasswordStore(configDir, repoPath, token string, gh github.Client, io cout.IO) error {
+	slog.Debug("cloning password store", "repo", repoPath)
+
+	secretsPath := filepath.Join(configDir, repoPath)
+	repoName := github.ExtractRepoName(repoPath)
+
+	cloneURL, err := gh.GetCloneURL(repoName)
+	if err != nil {
+		return fmt.Errorf("failed to get clone URL: %w", err)
+	}
+
+	gitClient := git.NewWithAuth(token)
+	if err := gitClient.Clone(cloneURL, secretsPath); err != nil {
+		return fmt.Errorf("failed to clone repository: %w", err)
+	}
+
+	io.Successfln("Cloned secret store to %s", secretsPath)
+	return nil
+}
 
 func SetupPasswordStore(configDir, repoPath string, g *gpg.GPG, fingerprint string, executor shell.Executor, io cout.IO) error {
 	slog.Debug("initializing password store", "repo", repoPath)

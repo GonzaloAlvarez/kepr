@@ -29,7 +29,7 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func SetupGPG(executor shell.Executor, io cout.IO, headless bool) (*gpg.GPG, error) {
+func SetupGPG(executor shell.Executor, io cout.IO, headless bool, repoExists bool) (*gpg.GPG, error) {
 	configDir, err := config.Dir()
 	if err != nil {
 		return nil, err
@@ -45,6 +45,12 @@ func SetupGPG(executor shell.Executor, io cout.IO, headless bool) (*gpg.GPG, err
 	}
 
 	io.Successfln("GPG environment initialized at %s", g.HomeDir)
+
+	if repoExists {
+		slog.Debug("joining existing repository, skipping key generation")
+		io.Infoln("Joined existing repository. Import your GPG keys to decrypt secrets.")
+		return g, nil
+	}
 
 	fingerprint := config.GetUserFingerprint()
 	if fingerprint == "" {
