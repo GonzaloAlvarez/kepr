@@ -14,15 +14,26 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
-package store
+package cmd
 
-func GenerateGitignore() string {
-	return `*
-!.gitignore
-!.gpg.id
-!*.gpg
-!keys/
-!keys/*.key
-!requests/
-`
+import (
+	"github.com/gonzaloalvarez/kepr/internal/request"
+	"github.com/spf13/cobra"
+)
+
+func NewRequestCmd(app *App) *cobra.Command {
+	return &cobra.Command{
+		Use:   "request path",
+		Short: "Request access to an encrypted path",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoPath, err := RequireRepo()
+			if err != nil {
+				return err
+			}
+
+			w := request.NewWorkflow(args[0], repoPath, app.GitHub, app.Shell, app.UI)
+			return w.Run(cmd.Context())
+		},
+	}
 }

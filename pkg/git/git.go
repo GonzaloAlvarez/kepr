@@ -196,6 +196,31 @@ func (g *Git) Push(repoPath, remoteName, branch string) error {
 	return nil
 }
 
+func (g *Git) CreateBranch(repoPath, branchName string) error {
+	slog.Debug("creating branch", "path", repoPath, "branch", branchName)
+
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	err = w.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(branchName),
+		Create: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create branch: %w", err)
+	}
+
+	slog.Debug("branch created and checked out", "branch", branchName)
+	return nil
+}
+
 func (g *Git) Pull(repoPath, remoteName, branch string, silent bool) error {
 	slog.Debug("pulling from remote", "path", repoPath, "remote", remoteName, "branch", branch)
 

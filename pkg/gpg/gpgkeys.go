@@ -104,6 +104,32 @@ func (g *GPG) BackupMasterKey(fingerprint string) error {
 	return nil
 }
 
+func (g *GPG) ExportPublicKey(fingerprint string) ([]byte, error) {
+	slog.Debug("exporting public key", "fingerprint", fingerprint)
+
+	stdout, stderr, err := g.execute("", "--armor", "--export", fingerprint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to export public key: %w, stderr: %s", err, stderr)
+	}
+
+	if stdout == "" {
+		return nil, fmt.Errorf("exported public key is empty for fingerprint %s", fingerprint)
+	}
+
+	return []byte(stdout), nil
+}
+
+func (g *GPG) ImportPublicKey(keyData []byte) error {
+	slog.Debug("importing public key")
+
+	_, stderr, err := g.execute(string(keyData), "--import")
+	if err != nil {
+		return fmt.Errorf("failed to import public key: %w, stderr: %s", err, stderr)
+	}
+
+	return nil
+}
+
 func (g *GPG) ListPublicKeys() ([]GPGKey, error) {
 	slog.Debug("listing public keys")
 

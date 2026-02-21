@@ -48,6 +48,8 @@ func TestInit_HappyPath(t *testing.T) {
 		"-----BEGIN PGP PRIVATE KEY BLOCK-----\nfake-key-content\n-----END PGP PRIVATE KEY BLOCK-----\n", "", nil)
 	mockShell.AddResponse("/usr/bin/gpg", []string{"--batch", "--yes", "--delete-secret-keys", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234"},
 		"", "", nil)
+	mockShell.AddResponse("/usr/bin/gpg", []string{"--armor", "--export", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234"},
+		"-----BEGIN PGP PUBLIC KEY BLOCK-----\nfake-public-key\n-----END PGP PUBLIC KEY BLOCK-----\n", "", nil)
 
 	mockUI.ConfirmInputs = []bool{true, true, true, true, true}
 
@@ -271,6 +273,8 @@ func TestInit_Headless(t *testing.T) {
 		"fpr:::::::::ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234:\nuid:-::::::::Test User <test@example.com>:\n", "", nil)
 	mockShell.AddResponse("/usr/bin/gpg", []string{"--batch", "--pinentry-mode", "loopback", "--passphrase", "",
 		"--quick-add-key", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234", "cv25519", "encr", "0"}, "", "", nil)
+	mockShell.AddResponse("/usr/bin/gpg", []string{"--armor", "--export", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234"},
+		"-----BEGIN PGP PUBLIC KEY BLOCK-----\nfake-public-key\n-----END PGP PUBLIC KEY BLOCK-----\n", "", nil)
 
 	mockUI.ConfirmInputs = []bool{true, true, true, true, true}
 

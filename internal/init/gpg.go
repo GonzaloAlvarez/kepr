@@ -46,14 +46,14 @@ func SetupGPG(executor shell.Executor, io cout.IO, headless bool, repoExists boo
 
 	io.Successfln("GPG environment initialized at %s", g.HomeDir)
 
-	if repoExists {
-		slog.Debug("joining existing repository, skipping key generation")
-		io.Infoln("Joined existing repository. Import your GPG keys to decrypt secrets.")
-		return g, nil
-	}
-
 	fingerprint := config.GetUserFingerprint()
 	if fingerprint == "" {
+		if repoExists && !headless {
+			slog.Debug("joining existing repository without headless, skipping key generation")
+			io.Infoln("Joined existing repository. Import your GPG keys to decrypt secrets.")
+			return g, nil
+		}
+
 		slog.Debug("no fingerprint found, generating keys")
 		userName := config.GetUserName()
 		userEmail := config.GetUserEmail()
@@ -73,7 +73,9 @@ func SetupGPG(executor shell.Executor, io cout.IO, headless bool, repoExists boo
 			return nil, fmt.Errorf("failed to save fingerprint: %w", err)
 		}
 
-		if headless {
+		if repoExists {
+			io.Infoln("Joined existing repository with new GPG identity.")
+		} else if headless {
 			io.Infoln("Headless mode: master key retained locally (no YubiKey provisioning)")
 		} else {
 			if err := g.BackupMasterKey(fingerprint); err != nil {

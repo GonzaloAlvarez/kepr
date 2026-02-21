@@ -611,6 +611,125 @@ func TestGPGKey_Struct(t *testing.T) {
 	}
 }
 
+func TestExportPublicKey_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export", "FINGERPRINT123"},
+		"-----BEGIN PGP PUBLIC KEY BLOCK-----\npublic key content\n-----END PGP PUBLIC KEY BLOCK-----\n", "", nil)
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	keyData, err := gpg.ExportPublicKey("FINGERPRINT123")
+	if err != nil {
+		t.Fatalf("ExportPublicKey() failed: %v", err)
+	}
+
+	if !strings.Contains(string(keyData), "BEGIN PGP PUBLIC KEY BLOCK") {
+		t.Errorf("expected PGP public key block, got: %s", string(keyData))
+	}
+}
+
+func TestExportPublicKey_Empty(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export", "UNKNOWN"},
+		"", "", nil)
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	_, err := gpg.ExportPublicKey("UNKNOWN")
+	if err == nil {
+		t.Fatal("expected ExportPublicKey() to fail with empty result")
+	}
+
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("expected error about empty key, got: %v", err)
+	}
+}
+
+func TestExportPublicKey_Error(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--armor", "--export", "FINGERPRINT123"},
+		"", "gpg error", fmt.Errorf("gpg error"))
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	_, err := gpg.ExportPublicKey("FINGERPRINT123")
+	if err == nil {
+		t.Fatal("expected ExportPublicKey() to fail")
+	}
+
+	if !strings.Contains(err.Error(), "failed to export public key") {
+		t.Errorf("expected error about export failure, got: %v", err)
+	}
+}
+
+func TestImportPublicKey_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--import"}, "", "", nil)
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	err := gpg.ImportPublicKey([]byte("-----BEGIN PGP PUBLIC KEY BLOCK-----\nkey\n-----END PGP PUBLIC KEY BLOCK-----\n"))
+	if err != nil {
+		t.Fatalf("ImportPublicKey() failed: %v", err)
+	}
+
+	if !mockExec.WasCalled("/usr/bin/gpg", "--import") {
+		t.Error("expected import command to be called")
+	}
+}
+
+func TestImportPublicKey_Error(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mockExec := NewMockExecutor()
+	mockExec.AddResponse("/usr/bin/gpg", []string{"--import"},
+		"", "import error", fmt.Errorf("gpg error"))
+
+	gpg := &GPG{
+		BinaryPath: "/usr/bin/gpg",
+		HomeDir:    tempDir,
+		executor:   mockExec,
+		io:         NewMockIO(),
+	}
+
+	err := gpg.ImportPublicKey([]byte("bad key data"))
+	if err == nil {
+		t.Fatal("expected ImportPublicKey() to fail")
+	}
+
+	if !strings.Contains(err.Error(), "failed to import public key") {
+		t.Errorf("expected error about import failure, got: %v", err)
+	}
+}
+
 func TestMockExecutor_LookPath(t *testing.T) {
 	mockExec := NewMockExecutor()
 

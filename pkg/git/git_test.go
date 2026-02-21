@@ -377,6 +377,50 @@ func TestClone_DestinationExists(t *testing.T) {
 	}
 }
 
+func TestCreateBranch(t *testing.T) {
+	tempDir := t.TempDir()
+	repoPath := filepath.Join(tempDir, "repo")
+
+	g := New()
+	if err := g.Init(repoPath); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoPath, "test.txt"), []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	if err := g.Commit(repoPath, "initial commit", "Test", "test@test.com"); err != nil {
+		t.Fatalf("Commit() returned error: %v", err)
+	}
+
+	if err := g.CreateBranch(repoPath, "access-request/test-uuid"); err != nil {
+		t.Fatalf("CreateBranch() returned error: %v", err)
+	}
+
+	repo, err := gogit.PlainOpen(repoPath)
+	if err != nil {
+		t.Fatalf("Failed to open repo: %v", err)
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatalf("Failed to get HEAD: %v", err)
+	}
+
+	if head.Name().Short() != "access-request/test-uuid" {
+		t.Errorf("HEAD branch = %q, want %q", head.Name().Short(), "access-request/test-uuid")
+	}
+}
+
+func TestCreateBranch_InvalidRepo(t *testing.T) {
+	g := New()
+	err := g.CreateBranch("/nonexistent/path", "test-branch")
+	if err == nil {
+		t.Error("CreateBranch() with invalid repo should return error")
+	}
+}
+
 func TestPush_WithLocalFileRemote(t *testing.T) {
 	tempDir := t.TempDir()
 

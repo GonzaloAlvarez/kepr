@@ -19,6 +19,7 @@ package initialize
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
@@ -70,6 +71,21 @@ func SetupPasswordStore(configDir, repoPath string, g *gpg.GPG, fingerprint stri
 
 	if err := gitClient.Init(secretsPath); err != nil {
 		return fmt.Errorf("failed to initialize git repository: %w", err)
+	}
+
+	keysDir := filepath.Join(secretsPath, "keys")
+	if err := os.MkdirAll(keysDir, 0700); err != nil {
+		return fmt.Errorf("failed to create keys directory: %w", err)
+	}
+
+	pubKey, err := g.ExportPublicKey(fingerprint)
+	if err != nil {
+		return fmt.Errorf("failed to export public key: %w", err)
+	}
+
+	keyPath := filepath.Join(keysDir, fingerprint+".key")
+	if err := os.WriteFile(keyPath, pubKey, 0644); err != nil {
+		return fmt.Errorf("failed to write public key: %w", err)
 	}
 
 	io.Successfln("Initialized local secret store at %s", p.SecretsPath)
