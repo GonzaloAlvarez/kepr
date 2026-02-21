@@ -18,6 +18,7 @@ package git
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -218,6 +219,153 @@ func (g *Git) CreateBranch(repoPath, branchName string) error {
 	}
 
 	slog.Debug("branch created and checked out", "branch", branchName)
+	return nil
+}
+
+func (g *Git) FetchBranches(repoPath, remoteName, pattern string) ([]string, error) {
+	slog.Debug("fetching branches", "path", repoPath, "remote", remoteName, "pattern", pattern)
+
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	refSpec := config.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/remotes/%s/%s", pattern, remoteName, pattern))
+	err = repo.Fetch(&git.FetchOptions{
+		RemoteName: remoteName,
+		RefSpecs:   []config.RefSpec{refSpec},
+		Auth:       g.getAuthForRemote(repo, remoteName),
+	})
+	if err != nil && err != git.NoErrAlreadyUpToDate {
+		return nil, fmt.Errorf("failed to fetch branches: %w", err)
+	}
+
+	refs, err := repo.References()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list references: %w", err)
+	}
+
+	prefix := "refs/remotes/" + remoteName + "/"
+	var branches []string
+	refs.ForEach(func(ref *plumbing.Reference) error {
+		name := ref.Name().String()
+		if strings.HasPrefix(name, prefix) {
+			branch := strings.TrimPrefix(name, prefix)
+			if matchGlob(pattern, branch) {
+				branches = append(branches, branch)
+			}
+		}
+		return nil
+	})
+
+	slog.Debug("fetched branches", "count", len(branches))
+	return branches, nil
+}
+
+func (g *Git) ReadFilesFromBranch(repoPath, remoteName, branch, dirPath string) (map[string][]byte, error) {
+	slog.Debug("reading files from branch", "path", repoPath, "remote", remoteName, "branch", branch, "dir", dirPath)
+
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	refName := plumbing.NewRemoteReferenceName(remoteName, branch)
+	ref, err := repo.Reference(refName, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve ref %s: %w", refName, err)
+	}
+
+	commit, err := repo.CommitObject(ref.Hash())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit: %w", err)
+	}
+
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tree: %w", err)
+	}
+
+	subTree, err := tree.Tree(dirPath)
+	if err != nil {
+		return nil, nil
+	}
+
+	files := make(map[string][]byte)
+	for _, entry := range subTree.Entries {
+		if entry.Mode.IsFile() {
+			f, err := subTree.TreeEntryFile(&entry)
+			if err != nil {
+				continue
+			}
+			reader, err := f.Reader()
+			if err != nil {
+				continue
+			}
+			data, err := io.ReadAll(reader)
+			reader.Close()
+			if err != nil {
+				continue
+			}
+			files[entry.Name] = data
+		}
+	}
+
+	slog.Debug("read files from branch", "count", len(files))
+	return files, nil
+}
+
+func matchGlob(pattern, name string) bool {
+	if !strings.Contains(pattern, "*") {
+		return pattern == name
+	}
+	prefix := strings.TrimSuffix(pattern, "*")
+	return strings.HasPrefix(name, prefix)
+}
+
+func (g *Git) DeleteRemoteBranch(repoPath, remoteName, branch string) error {
+	slog.Debug("deleting remote branch", "path", repoPath, "remote", remoteName, "branch", branch)
+
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	refSpec := config.RefSpec(fmt.Sprintf(":refs/heads/%s", branch))
+	err = repo.Push(&git.PushOptions{
+		RemoteName: remoteName,
+		RefSpecs:   []config.RefSpec{refSpec},
+		Auth:       g.getAuthForRemote(repo, remoteName),
+	})
+	if err != nil && err != git.NoErrAlreadyUpToDate {
+		return fmt.Errorf("failed to delete remote branch: %w", err)
+	}
+
+	slog.Debug("remote branch deleted", "branch", branch)
+	return nil
+}
+
+func (g *Git) CheckoutMain(repoPath string) error {
+	slog.Debug("checking out main", "path", repoPath)
+
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	err = w.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName("main"),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to checkout main: %w", err)
+	}
+
+	slog.Debug("checked out main")
 	return nil
 }
 

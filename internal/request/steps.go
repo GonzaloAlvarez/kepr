@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gonzaloalvarez/kepr/internal/common"
@@ -113,6 +114,48 @@ func (c *Context) stepPull() workflow.StepConfig {
 				return fmt.Errorf("failed to pull latest changes: %w", err)
 			}
 			c.UI.Successfln("Pulled latest changes from remote")
+			return nil
+		},
+	}
+}
+
+func (c *Context) stepFetchRequests() workflow.StepConfig {
+	return workflow.StepConfig{
+		Name: "fetch_requests",
+		Execute: func(ctx context.Context) error {
+			c.UI.Infofln("Fetching pending access requests from remote")
+
+			gitClient := git.NewWithAuth(c.Token)
+			branches, err := gitClient.FetchBranches(c.SecretsPath, "origin", "access-request/*")
+			if err != nil {
+				return fmt.Errorf("failed to fetch access-request branches: %w", err)
+			}
+
+			if len(branches) == 0 {
+				return nil
+			}
+
+			requestsDir := filepath.Join(c.SecretsPath, "requests")
+			if err := os.MkdirAll(requestsDir, 0700); err != nil {
+				return fmt.Errorf("failed to create requests directory: %w", err)
+			}
+
+			for _, branch := range branches {
+				files, err := gitClient.ReadFilesFromBranch(c.SecretsPath, "origin", branch, "requests")
+				if err != nil {
+					continue
+				}
+				for name, data := range files {
+					if !strings.HasSuffix(name, ".json.gpg") {
+						continue
+					}
+					localPath := filepath.Join(requestsDir, name)
+					if err := os.WriteFile(localPath, data, 0600); err != nil {
+						return fmt.Errorf("failed to write request file %s: %w", name, err)
+					}
+				}
+			}
+
 			return nil
 		},
 	}

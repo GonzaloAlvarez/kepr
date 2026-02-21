@@ -216,7 +216,7 @@ func TestMetadataTypes(t *testing.T) {
 }
 
 func TestNew_NilGPGClient(t *testing.T) {
-	_, err := New("/tmp/secrets", nil)
+	_, err := New("/tmp/secrets", nil, "")
 	if err != ErrInvalidGPGClient {
 		t.Errorf("New() with nil GPG = %v, want ErrInvalidGPGClient", err)
 	}
@@ -408,5 +408,66 @@ func TestAddFile_StoreNotInitialized(t *testing.T) {
 	_, err := st.AddFile("test/file", []byte("data"), "test.txt")
 	if err != ErrStoreNotInitialized {
 		t.Errorf("AddFile on uninitialized store = %v, want ErrStoreNotInitialized", err)
+	}
+}
+
+func TestHasAccess_EmptyFingerprint(t *testing.T) {
+	dir := t.TempDir()
+	if err := WriteGpgID(dir, []string{"FP_AAA"}); err != nil {
+		t.Fatalf("failed to write .gpg.id: %v", err)
+	}
+	st := &Store{Fingerprint: ""}
+	if !st.hasAccess(dir) {
+		t.Error("hasAccess with empty fingerprint should return true (owner mode)")
+	}
+}
+
+func TestHasAccess_FingerprintPresent(t *testing.T) {
+	dir := t.TempDir()
+	if err := WriteGpgID(dir, []string{"FP_AAA", "FP_BBB"}); err != nil {
+		t.Fatalf("failed to write .gpg.id: %v", err)
+	}
+	st := &Store{Fingerprint: "FP_BBB"}
+	if !st.hasAccess(dir) {
+		t.Error("hasAccess should return true when fingerprint is in .gpg.id")
+	}
+}
+
+func TestHasAccess_FingerprintAbsent(t *testing.T) {
+	dir := t.TempDir()
+	if err := WriteGpgID(dir, []string{"FP_AAA", "FP_BBB"}); err != nil {
+		t.Fatalf("failed to write .gpg.id: %v", err)
+	}
+	st := &Store{Fingerprint: "FP_CCC"}
+	if st.hasAccess(dir) {
+		t.Error("hasAccess should return false when fingerprint is not in .gpg.id")
+	}
+}
+
+func TestHasAccess_NoGpgIDFile(t *testing.T) {
+	dir := t.TempDir()
+	st := &Store{Fingerprint: "FP_AAA"}
+	if st.hasAccess(dir) {
+		t.Error("hasAccess should return false when .gpg.id does not exist")
+	}
+}
+
+func TestPathSegment(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"folder", "folder"},
+		{"folder/subfolder", "subfolder"},
+		{"a/b/c", "c"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := pathSegment(tt.input)
+			if result != tt.expected {
+				t.Errorf("pathSegment(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
 	}
 }

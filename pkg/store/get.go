@@ -47,12 +47,12 @@ func (s *Store) Get(path string) ([]byte, *Metadata, error) {
 	slog.Debug("path segments", "dirs", dirSegments, "secret", secretName)
 
 	currentPath := s.SecretsPath
-	for _, segment := range dirSegments {
-		uuid, err := s.findDirectory(currentPath, segment)
+	if len(dirSegments) > 0 {
+		resolved, err := s.resolveAccessiblePath(dirSegments)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to find directory %s: %w", segment, err)
+			return nil, nil, fmt.Errorf("failed to resolve path: %w", err)
 		}
-		currentPath = filepath.Join(currentPath, uuid)
+		currentPath = resolved
 	}
 
 	slog.Debug("looking for secret in directory", "path", currentPath, "name", secretName)

@@ -57,11 +57,14 @@ func (g *GPG) Decrypt(data []byte) ([]byte, error) {
 		userPin = ""
 	}
 
-	if ciMode || (userPin != "" && userPin != "manual") {
+	headless := config.GetHeadless()
+
+	if ciMode || headless || (userPin != "" && userPin != "manual") {
 		slog.Debug("using automated decryption with loopback pinentry")
 		args := []string{
 			"--decrypt",
 			"--batch",
+			"--no-tty",
 			"--pinentry-mode", "loopback",
 			"--passphrase", userPin,
 		}

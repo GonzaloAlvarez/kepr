@@ -19,6 +19,7 @@ package git
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -418,6 +419,311 @@ func TestCreateBranch_InvalidRepo(t *testing.T) {
 	err := g.CreateBranch("/nonexistent/path", "test-branch")
 	if err == nil {
 		t.Error("CreateBranch() with invalid repo should return error")
+	}
+}
+
+func TestFetchBranches(t *testing.T) {
+	tempDir := t.TempDir()
+
+	bareRepoPath := filepath.Join(tempDir, "bare.git")
+	createBareRepo(t, bareRepoPath)
+
+	pushRepoPath := filepath.Join(tempDir, "push")
+	g := New()
+	if err := g.Init(pushRepoPath); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(pushRepoPath, "test.txt"), []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	if err := g.Commit(pushRepoPath, "initial commit", "Test", "test@test.com"); err != nil {
+		t.Fatalf("Commit() returned error: %v", err)
+	}
+
+	if err := g.ConfigureRemote(pushRepoPath, "origin", "file://"+bareRepoPath); err != nil {
+		t.Fatalf("ConfigureRemote() returned error: %v", err)
+	}
+
+	if err := g.Push(pushRepoPath, "origin", "main"); err != nil {
+		t.Fatalf("Push() returned error: %v", err)
+	}
+
+	for _, branch := range []string{"access-request/uuid1", "access-request/uuid2", "other/branch"} {
+		if err := g.CreateBranch(pushRepoPath, branch); err != nil {
+			t.Fatalf("CreateBranch(%s) returned error: %v", branch, err)
+		}
+
+		fname := strings.ReplaceAll(branch, "/", "_") + ".txt"
+		if err := os.WriteFile(filepath.Join(pushRepoPath, fname), []byte(branch), 0644); err != nil {
+			t.Fatalf("Failed to create file: %v", err)
+		}
+
+		if err := g.Commit(pushRepoPath, "commit on "+branch, "Test", "test@test.com"); err != nil {
+			t.Fatalf("Commit() returned error: %v", err)
+		}
+
+		if err := g.Push(pushRepoPath, "origin", branch); err != nil {
+			t.Fatalf("Push(%s) returned error: %v", branch, err)
+		}
+
+		if err := g.CheckoutMain(pushRepoPath); err != nil {
+			t.Fatalf("CheckoutMain() returned error: %v", err)
+		}
+	}
+
+	fetchRepoPath := filepath.Join(tempDir, "fetch")
+	if err := g.Clone("file://"+bareRepoPath, fetchRepoPath); err != nil {
+		t.Fatalf("Clone() returned error: %v", err)
+	}
+
+	branches, err := g.FetchBranches(fetchRepoPath, "origin", "access-request/*")
+	if err != nil {
+		t.Fatalf("FetchBranches() returned error: %v", err)
+	}
+
+	if len(branches) != 2 {
+		t.Fatalf("FetchBranches() returned %d branches, want 2: %v", len(branches), branches)
+	}
+
+	found := map[string]bool{}
+	for _, b := range branches {
+		found[b] = true
+	}
+
+	if !found["access-request/uuid1"] || !found["access-request/uuid2"] {
+		t.Errorf("FetchBranches() = %v, want access-request/uuid1 and access-request/uuid2", branches)
+	}
+}
+
+func TestReadFilesFromBranch(t *testing.T) {
+	tempDir := t.TempDir()
+
+	bareRepoPath := filepath.Join(tempDir, "bare.git")
+	createBareRepo(t, bareRepoPath)
+
+	pushRepoPath := filepath.Join(tempDir, "push")
+	g := New()
+	if err := g.Init(pushRepoPath); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(pushRepoPath, "test.txt"), []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	if err := g.Commit(pushRepoPath, "initial commit", "Test", "test@test.com"); err != nil {
+		t.Fatalf("Commit() returned error: %v", err)
+	}
+
+	if err := g.ConfigureRemote(pushRepoPath, "origin", "file://"+bareRepoPath); err != nil {
+		t.Fatalf("ConfigureRemote() returned error: %v", err)
+	}
+
+	if err := g.Push(pushRepoPath, "origin", "main"); err != nil {
+		t.Fatalf("Push() returned error: %v", err)
+	}
+
+	if err := g.CreateBranch(pushRepoPath, "access-request/test-uuid"); err != nil {
+		t.Fatalf("CreateBranch() returned error: %v", err)
+	}
+
+	requestsDir := filepath.Join(pushRepoPath, "requests")
+	if err := os.MkdirAll(requestsDir, 0700); err != nil {
+		t.Fatalf("Failed to create requests dir: %v", err)
+	}
+	requestContent := []byte(`{"fingerprint":"ABC","path":"prod/db"}`)
+	if err := os.WriteFile(filepath.Join(requestsDir, "test-uuid.json.gpg"), requestContent, 0600); err != nil {
+		t.Fatalf("Failed to write request file: %v", err)
+	}
+
+	if err := g.Commit(pushRepoPath, "add request", "Test", "test@test.com"); err != nil {
+		t.Fatalf("Commit() returned error: %v", err)
+	}
+
+	if err := g.Push(pushRepoPath, "origin", "access-request/test-uuid"); err != nil {
+		t.Fatalf("Push() returned error: %v", err)
+	}
+
+	fetchRepoPath := filepath.Join(tempDir, "fetch")
+	if err := g.Clone("file://"+bareRepoPath, fetchRepoPath); err != nil {
+		t.Fatalf("Clone() returned error: %v", err)
+	}
+
+	_, err := g.FetchBranches(fetchRepoPath, "origin", "access-request/*")
+	if err != nil {
+		t.Fatalf("FetchBranches() returned error: %v", err)
+	}
+
+	files, err := g.ReadFilesFromBranch(fetchRepoPath, "origin", "access-request/test-uuid", "requests")
+	if err != nil {
+		t.Fatalf("ReadFilesFromBranch() returned error: %v", err)
+	}
+
+	if len(files) != 1 {
+		t.Fatalf("ReadFilesFromBranch() returned %d files, want 1", len(files))
+	}
+
+	data, ok := files["test-uuid.json.gpg"]
+	if !ok {
+		t.Fatal("expected file test-uuid.json.gpg not found in results")
+	}
+
+	if string(data) != string(requestContent) {
+		t.Errorf("file content = %q, want %q", string(data), string(requestContent))
+	}
+}
+
+func TestReadFilesFromBranch_NoDirReturnsNil(t *testing.T) {
+	tempDir := t.TempDir()
+
+	bareRepoPath := filepath.Join(tempDir, "bare.git")
+	createBareRepo(t, bareRepoPath)
+
+	repoPath := filepath.Join(tempDir, "repo")
+	g := New()
+	if err := g.Init(repoPath); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoPath, "test.txt"), []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	if err := g.Commit(repoPath, "initial commit", "Test", "test@test.com"); err != nil {
+		t.Fatalf("Commit() returned error: %v", err)
+	}
+
+	if err := g.ConfigureRemote(repoPath, "origin", "file://"+bareRepoPath); err != nil {
+		t.Fatalf("ConfigureRemote() returned error: %v", err)
+	}
+
+	if err := g.Push(repoPath, "origin", "main"); err != nil {
+		t.Fatalf("Push() returned error: %v", err)
+	}
+
+	if err := g.CreateBranch(repoPath, "access-request/no-requests"); err != nil {
+		t.Fatalf("CreateBranch() returned error: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoPath, "other.txt"), []byte("other"), 0644); err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+
+	if err := g.Commit(repoPath, "branch commit", "Test", "test@test.com"); err != nil {
+		t.Fatalf("Commit() returned error: %v", err)
+	}
+
+	if err := g.Push(repoPath, "origin", "access-request/no-requests"); err != nil {
+		t.Fatalf("Push() returned error: %v", err)
+	}
+
+	clonePath := filepath.Join(tempDir, "clone")
+	if err := g.Clone("file://"+bareRepoPath, clonePath); err != nil {
+		t.Fatalf("Clone() returned error: %v", err)
+	}
+
+	if _, err := g.FetchBranches(clonePath, "origin", "access-request/*"); err != nil {
+		t.Fatalf("FetchBranches() returned error: %v", err)
+	}
+
+	files, err := g.ReadFilesFromBranch(clonePath, "origin", "access-request/no-requests", "requests")
+	if err != nil {
+		t.Fatalf("ReadFilesFromBranch() returned error: %v", err)
+	}
+
+	if files != nil {
+		t.Errorf("expected nil for missing directory, got %v", files)
+	}
+}
+
+func TestCheckoutMain(t *testing.T) {
+	tempDir := t.TempDir()
+	repoPath := filepath.Join(tempDir, "repo")
+
+	g := New()
+	if err := g.Init(repoPath); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoPath, "test.txt"), []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	if err := g.Commit(repoPath, "initial commit", "Test", "test@test.com"); err != nil {
+		t.Fatalf("Commit() returned error: %v", err)
+	}
+
+	if err := g.CreateBranch(repoPath, "feature-branch"); err != nil {
+		t.Fatalf("CreateBranch() returned error: %v", err)
+	}
+
+	if err := g.CheckoutMain(repoPath); err != nil {
+		t.Fatalf("CheckoutMain() returned error: %v", err)
+	}
+
+	repo, err := gogit.PlainOpen(repoPath)
+	if err != nil {
+		t.Fatalf("Failed to open repo: %v", err)
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatalf("Failed to get HEAD: %v", err)
+	}
+
+	if head.Name().Short() != "main" {
+		t.Errorf("HEAD branch = %q, want %q", head.Name().Short(), "main")
+	}
+}
+
+func TestDeleteRemoteBranch(t *testing.T) {
+	tempDir := t.TempDir()
+
+	bareRepoPath := filepath.Join(tempDir, "bare.git")
+	createBareRepo(t, bareRepoPath)
+
+	workRepoPath := filepath.Join(tempDir, "work")
+	g := New()
+	if err := g.Init(workRepoPath); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(workRepoPath, "test.txt"), []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	if err := g.Commit(workRepoPath, "initial commit", "Test", "test@test.com"); err != nil {
+		t.Fatalf("Commit() returned error: %v", err)
+	}
+
+	if err := g.ConfigureRemote(workRepoPath, "origin", "file://"+bareRepoPath); err != nil {
+		t.Fatalf("ConfigureRemote() returned error: %v", err)
+	}
+
+	if err := g.Push(workRepoPath, "origin", "main"); err != nil {
+		t.Fatalf("Push() returned error: %v", err)
+	}
+
+	if err := g.CreateBranch(workRepoPath, "test-branch"); err != nil {
+		t.Fatalf("CreateBranch() returned error: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(workRepoPath, "branch.txt"), []byte("branch"), 0644); err != nil {
+		t.Fatalf("Failed to create branch file: %v", err)
+	}
+
+	if err := g.Commit(workRepoPath, "branch commit", "Test", "test@test.com"); err != nil {
+		t.Fatalf("Commit() returned error: %v", err)
+	}
+
+	if err := g.Push(workRepoPath, "origin", "test-branch"); err != nil {
+		t.Fatalf("Push() returned error: %v", err)
+	}
+
+	if err := g.DeleteRemoteBranch(workRepoPath, "origin", "test-branch"); err != nil {
+		t.Fatalf("DeleteRemoteBranch() returned error: %v", err)
 	}
 }
 

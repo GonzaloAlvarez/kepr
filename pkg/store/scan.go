@@ -34,12 +34,19 @@ func (s *Store) findDirectory(parentPath string, dirName string) (string, error)
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || !isStoreDir(entry.Name()) {
 			continue
 		}
 
 		uuid := entry.Name()
-		metadataPath := filepath.Join(parentPath, uuid, uuid+"_md.gpg")
+		dirPath := filepath.Join(parentPath, uuid)
+
+		if !s.hasAccess(dirPath) {
+			slog.Debug("no access to directory, skipping", "uuid", uuid)
+			continue
+		}
+
+		metadataPath := filepath.Join(dirPath, uuid+"_md.gpg")
 
 		metadataEncrypted, err := os.ReadFile(metadataPath)
 		if err != nil {
@@ -59,13 +66,108 @@ func (s *Store) findDirectory(parentPath string, dirName string) (string, error)
 			continue
 		}
 
-		if metadata.Path == dirName && metadata.Type == TypeDir {
+		if metadata.Type == TypeDir && (metadata.Path == dirName || pathSegment(metadata.Path) == dirName) {
 			slog.Debug("found directory", "uuid", uuid, "name", dirName)
 			return uuid, nil
 		}
 	}
 
 	return "", fmt.Errorf("directory not found: %s", dirName)
+}
+
+func pathSegment(p string) string {
+	idx := strings.LastIndex(p, "/")
+	if idx < 0 {
+		return p
+	}
+	return p[idx+1:]
+}
+
+func (s *Store) resolveAccessiblePath(segments []string) (string, error) {
+	return s.resolveAccessiblePathRecursive(s.SecretsPath, segments, "")
+}
+
+func isStoreDir(name string) bool {
+	return len(name) > 0 && name[0] != '.'
+}
+
+func (s *Store) resolveAccessiblePathRecursive(currentDir string, remainingSegments []string, pathSoFar string) (string, error) {
+	if len(remainingSegments) == 0 {
+		return currentDir, nil
+	}
+
+	targetSegment := remainingSegments[0]
+	rest := remainingSegments[1:]
+
+	var expectedFullPath string
+	if pathSoFar == "" {
+		expectedFullPath = targetSegment
+	} else {
+		expectedFullPath = pathSoFar + "/" + targetSegment
+	}
+
+	entries, err := os.ReadDir(currentDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	var opaqueCandidates []string
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !isStoreDir(name) {
+			continue
+		}
+
+		dirPath := filepath.Join(currentDir, name)
+
+		if s.hasAccess(dirPath) {
+			metadataPath := filepath.Join(dirPath, name+"_md.gpg")
+
+			metadataEncrypted, err := os.ReadFile(metadataPath)
+			if err != nil {
+				slog.Debug("failed to read metadata file, skipping", "path", metadataPath, "error", err)
+				continue
+			}
+
+			metadataDecrypted, err := s.gpg.Decrypt(metadataEncrypted)
+			if err != nil {
+				slog.Debug("failed to decrypt metadata, skipping", "path", metadataPath, "error", err)
+				continue
+			}
+
+			metadata, err := DeserializeMetadata(metadataDecrypted)
+			if err != nil {
+				slog.Debug("failed to deserialize metadata, skipping", "path", metadataPath, "error", err)
+				continue
+			}
+
+			if metadata.Type != TypeDir {
+				continue
+			}
+
+			if metadata.Path == expectedFullPath || metadata.Path == targetSegment {
+				slog.Debug("found accessible directory", "uuid", name, "path", metadata.Path)
+				return s.resolveAccessiblePathRecursive(dirPath, rest, expectedFullPath)
+			}
+		} else if len(rest) > 0 {
+			opaqueCandidates = append(opaqueCandidates, dirPath)
+		}
+	}
+
+	for _, candidatePath := range opaqueCandidates {
+		result, err := s.resolveAccessiblePathRecursive(candidatePath, rest, expectedFullPath)
+		if err == nil {
+			slog.Debug("found path through opaque directory", "candidate", candidatePath, "target", expectedFullPath)
+			return result, nil
+		}
+	}
+
+	return "", fmt.Errorf("directory not found: %s", expectedFullPath)
 }
 
 func (s *Store) findSecret(parentPath string, secretName string) (string, error) {
@@ -137,13 +239,11 @@ func (s *Store) List(path string) ([]Entry, error) {
 		}
 
 		segments := SplitPath(normalizedPath)
-		for _, segment := range segments {
-			uuid, err := s.findDirectory(targetPath, segment)
-			if err != nil {
-				return []Entry{}, nil
-			}
-			targetPath = filepath.Join(targetPath, uuid)
+		resolved, err := s.resolveAccessiblePath(segments)
+		if err != nil {
+			return []Entry{}, nil
 		}
+		targetPath = resolved
 	}
 
 	entries, err := os.ReadDir(targetPath)
@@ -159,7 +259,17 @@ func (s *Store) List(path string) ([]Entry, error) {
 	for _, entry := range entries {
 		if entry.IsDir() {
 			uuid := entry.Name()
-			metadataPath := filepath.Join(targetPath, uuid, uuid+"_md.gpg")
+			if !isStoreDir(uuid) {
+				continue
+			}
+			dirPath := filepath.Join(targetPath, uuid)
+
+			if !s.hasAccess(dirPath) {
+				slog.Debug("no access to subdirectory, skipping", "uuid", uuid)
+				continue
+			}
+
+			metadataPath := filepath.Join(dirPath, uuid+"_md.gpg")
 
 			metadataEncrypted, err := os.ReadFile(metadataPath)
 			if err != nil {
@@ -180,7 +290,8 @@ func (s *Store) List(path string) ([]Entry, error) {
 			}
 
 			if metadata.Type == TypeDir {
-				result = append(result, Entry{Name: metadata.Path, Type: TypeDir})
+				displayName := pathSegment(metadata.Path)
+				result = append(result, Entry{Name: displayName, Type: TypeDir})
 			}
 		} else {
 			fileName := entry.Name()

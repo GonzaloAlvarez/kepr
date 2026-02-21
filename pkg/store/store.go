@@ -40,18 +40,36 @@ var (
 
 type Store struct {
 	SecretsPath string
+	Fingerprint string
 	gpg         *gpg.GPG
 }
 
-func New(secretsPath string, gpgClient *gpg.GPG) (*Store, error) {
+func New(secretsPath string, gpgClient *gpg.GPG, fingerprint string) (*Store, error) {
 	if gpgClient == nil {
 		return nil, ErrInvalidGPGClient
 	}
 
 	return &Store{
 		SecretsPath: secretsPath,
+		Fingerprint: fingerprint,
 		gpg:         gpgClient,
 	}, nil
+}
+
+func (s *Store) hasAccess(dirPath string) bool {
+	if s.Fingerprint == "" {
+		return true
+	}
+	fingerprints, err := ReadGpgID(dirPath)
+	if err != nil {
+		return false
+	}
+	for _, fp := range fingerprints {
+		if fp == s.Fingerprint {
+			return true
+		}
+	}
+	return false
 }
 
 func ReadGpgID(dirPath string) ([]string, error) {
@@ -117,8 +135,8 @@ func (s *Store) Init(fingerprints []string) error {
 	return nil
 }
 
-func (s *Store) findOrCreateDirectory(parentDirPath string, dirName string) (string, error) {
-	slog.Debug("finding or creating directory", "parent", parentDirPath, "name", dirName)
+func (s *Store) findOrCreateDirectory(parentDirPath string, dirName string, fullPath string) (string, error) {
+	slog.Debug("finding or creating directory", "parent", parentDirPath, "name", dirName, "fullPath", fullPath)
 
 	uuid, err := s.findDirectory(parentDirPath, dirName)
 	if err == nil {
@@ -147,7 +165,7 @@ func (s *Store) findOrCreateDirectory(parentDirPath string, dirName string) (str
 	}
 
 	metadata := &Metadata{
-		Path: dirName,
+		Path: fullPath,
 		Type: TypeDir,
 	}
 
@@ -166,6 +184,6 @@ func (s *Store) findOrCreateDirectory(parentDirPath string, dirName string) (str
 		return "", fmt.Errorf("failed to write metadata file: %w", err)
 	}
 
-	slog.Debug("created new directory", "uuid", uuid, "name", dirName)
+	slog.Debug("created new directory", "uuid", uuid, "name", dirName, "fullPath", fullPath)
 	return uuid, nil
 }

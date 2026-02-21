@@ -22,18 +22,34 @@ import (
 )
 
 func NewRequestCmd(app *App) *cobra.Command {
-	return &cobra.Command{
-		Use:   "request path",
-		Short: "Request access to an encrypted path",
-		Args:  cobra.ExactArgs(1),
+	var approveFlag string
+
+	cmd := &cobra.Command{
+		Use:   "request [path]",
+		Short: "Manage access requests",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			repoPath, err := RequireRepo()
 			if err != nil {
 				return err
 			}
 
+			if approveFlag != "" {
+				w := request.NewApproveWorkflow(approveFlag, repoPath, app.GitHub, app.Shell, app.UI)
+				return w.Run(cmd.Context())
+			}
+
+			if len(args) == 0 {
+				w := request.NewListWorkflow(repoPath, app.GitHub, app.Shell, app.UI)
+				return w.Run(cmd.Context())
+			}
+
 			w := request.NewWorkflow(args[0], repoPath, app.GitHub, app.Shell, app.UI)
 			return w.Run(cmd.Context())
 		},
 	}
+
+	cmd.Flags().StringVar(&approveFlag, "approve", "", "approve a pending request by UUID prefix")
+
+	return cmd
 }

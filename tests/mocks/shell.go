@@ -11,8 +11,9 @@ import (
 )
 
 type MockShell struct {
-	Calls     []ShellCall
-	Responses map[string]ShellResponse
+	Calls          []ShellCall
+	Responses      map[string]ShellResponse
+	QueuedResponses map[string][]ShellResponse
 }
 
 type ShellCall struct {
@@ -29,9 +30,19 @@ type ShellResponse struct {
 
 func NewMockShell() *MockShell {
 	return &MockShell{
-		Calls:     []ShellCall{},
-		Responses: make(map[string]ShellResponse),
+		Calls:           []ShellCall{},
+		Responses:       make(map[string]ShellResponse),
+		QueuedResponses: make(map[string][]ShellResponse),
 	}
+}
+
+func (m *MockShell) AddQueuedResponse(name string, args []string, stdout, stderr string, err error) {
+	key := m.makeKey(name, args)
+	m.QueuedResponses[key] = append(m.QueuedResponses[key], ShellResponse{
+		Stdout: stdout,
+		Stderr: stderr,
+		Err:    err,
+	})
 }
 
 func (m *MockShell) LookPath(file string) (string, error) {
@@ -169,7 +180,18 @@ func (c *MockCmd) Run() error {
 	})
 
 	key := c.shell.makeKey(c.name, c.args)
-	resp, ok := c.shell.Responses[key]
+
+	var resp ShellResponse
+	var ok bool
+
+	if queue, qok := c.shell.QueuedResponses[key]; qok && len(queue) > 0 {
+		resp = queue[0]
+		c.shell.QueuedResponses[key] = queue[1:]
+		ok = true
+	} else {
+		resp, ok = c.shell.Responses[key]
+	}
+
 	if !ok {
 		return fmt.Errorf("mock: unexpected command: %s %v", c.name, c.args)
 	}

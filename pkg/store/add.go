@@ -49,8 +49,14 @@ func (s *Store) Add(path string, io cout.IO) (string, error) {
 	slog.Debug("path segments", "dirs", dirSegments, "secret", secretName)
 
 	currentPath := s.SecretsPath
+	var fullPathAccum string
 	for _, segment := range dirSegments {
-		uuid, err := s.findOrCreateDirectory(currentPath, segment)
+		if fullPathAccum == "" {
+			fullPathAccum = segment
+		} else {
+			fullPathAccum = fullPathAccum + "/" + segment
+		}
+		uuid, err := s.findOrCreateDirectory(currentPath, segment, fullPathAccum)
 		if err != nil {
 			return "", fmt.Errorf("failed to create directory structure: %w", err)
 		}
@@ -146,8 +152,14 @@ func (s *Store) AddFile(path string, fileData []byte, originalFilename string) (
 	slog.Debug("path segments", "dirs", dirSegments, "secret", secretName)
 
 	currentPath := s.SecretsPath
+	var fullPathAccum string
 	for _, segment := range dirSegments {
-		uuid, err := s.findOrCreateDirectory(currentPath, segment)
+		if fullPathAccum == "" {
+			fullPathAccum = segment
+		} else {
+			fullPathAccum = fullPathAccum + "/" + segment
+		}
+		uuid, err := s.findOrCreateDirectory(currentPath, segment, fullPathAccum)
 		if err != nil {
 			return "", fmt.Errorf("failed to create directory structure: %w", err)
 		}

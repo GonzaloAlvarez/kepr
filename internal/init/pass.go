@@ -56,7 +56,7 @@ func SetupPasswordStore(configDir, repoPath string, g *gpg.GPG, fingerprint stri
 
 	secretsPath := filepath.Join(configDir, repoPath)
 
-	st, err := store.New(secretsPath, g)
+	st, err := store.New(secretsPath, g, "")
 	if err != nil {
 		return fmt.Errorf("failed to create store: %w", err)
 	}
