@@ -108,3 +108,20 @@ func FindRequestByPrefix(secretsPath string, g *gpg.GPG, prefix string) (*Pendin
 
 	return &matches[0], nil
 }
+
+func FindRequestsByEmail(secretsPath string, g *gpg.GPG, email string, resolveEmail func(*gpg.GPG, PendingRequest) string) ([]PendingRequest, error) {
+	all, err := ListRequests(secretsPath, g)
+	if err != nil {
+		return nil, err
+	}
+
+	var matches []PendingRequest
+	for _, r := range all {
+		e := resolveEmail(g, r)
+		if strings.EqualFold(e, email) {
+			matches = append(matches, r)
+		}
+	}
+
+	return matches, nil
+}

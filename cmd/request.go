@@ -22,7 +22,8 @@ import (
 )
 
 func NewRequestCmd(app *App) *cobra.Command {
-	var approveFlag string
+	var approveFlag bool
+	var fromFlag string
 
 	cmd := &cobra.Command{
 		Use:   "request [path]",
@@ -34,8 +35,16 @@ func NewRequestCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			if approveFlag != "" {
-				w := request.NewApproveWorkflow(approveFlag, repoPath, app.GitHub, app.Shell, app.UI)
+			if approveFlag && fromFlag != "" {
+				w := request.NewApproveByEmailWorkflow(fromFlag, repoPath, app.GitHub, app.Shell, app.UI)
+				return w.Run(cmd.Context())
+			}
+
+			if approveFlag {
+				if len(args) == 0 {
+					return cmd.Help()
+				}
+				w := request.NewApproveWorkflow(args[0], repoPath, app.GitHub, app.Shell, app.UI)
 				return w.Run(cmd.Context())
 			}
 
@@ -49,7 +58,8 @@ func NewRequestCmd(app *App) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&approveFlag, "approve", "", "approve a pending request by UUID prefix")
+	cmd.Flags().BoolVar(&approveFlag, "approve", false, "approve a pending request")
+	cmd.Flags().StringVar(&fromFlag, "from", "", "approve all requests from the given email (use with --approve)")
 
 	return cmd
 }

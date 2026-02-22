@@ -26,6 +26,7 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/cout"
 	"github.com/gonzaloalvarez/kepr/pkg/git"
 	"github.com/gonzaloalvarez/kepr/pkg/github"
+	"github.com/gonzaloalvarez/kepr/pkg/gpg"
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 	"github.com/gonzaloalvarez/kepr/pkg/store"
 )
@@ -205,6 +206,129 @@ func (c *ApproveContext) stepDeleteBranch() workflow.StepConfig {
 			return nil
 		},
 	}
+}
+
+func (c *ApproveContext) approveRequest(ctx context.Context) error {
+	if err := c.stepImportRequesterKey().Execute(ctx); err != nil {
+		return err
+	}
+	if err := c.stepRekey().Execute(ctx); err != nil {
+		return err
+	}
+	if err := c.stepExportRequesterKey().Execute(ctx); err != nil {
+		return err
+	}
+	if err := c.stepCleanupRequest().Execute(ctx); err != nil {
+		return err
+	}
+	if err := c.stepApproveCommitAndPush().Execute(ctx); err != nil {
+		return err
+	}
+	if err := c.stepDeleteBranch().Execute(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+type ApproveByEmailContext struct {
+	Context
+	Email string
+}
+
+func (c *ApproveByEmailContext) stepApproveAllByEmail() workflow.StepConfig {
+	return workflow.StepConfig{
+		Name: "approve_all_by_email",
+		Execute: func(ctx context.Context) error {
+			resolveEmail := func(g *gpg.GPG, req store.PendingRequest) string {
+				_, email := resolveIdentity(g, req)
+				return email
+			}
+
+			matches, err := store.FindRequestsByEmail(c.SecretsPath, c.GPG, c.Email, resolveEmail)
+			if err != nil {
+				return fmt.Errorf("failed to find requests by email: %w", err)
+			}
+
+			if len(matches) == 0 {
+				c.UI.Infofln("No pending requests from %s", c.Email)
+				return nil
+			}
+
+			c.UI.Infofln("Found %d request(s) from %s", len(matches), c.Email)
+
+			for _, req := range matches {
+				reqCopy := req
+				ac := &ApproveContext{
+					Context: c.Context,
+					Request: &reqCopy,
+				}
+				c.UI.Infofln("Approving request %s for path %s", req.UUID, req.Path)
+				if err := ac.approveRequest(ctx); err != nil {
+					return fmt.Errorf("failed to approve request %s: %w", req.UUID, err)
+				}
+			}
+
+			return nil
+		},
+	}
+}
+
+const (
+	ApproveByEmailStateStart     workflow.State = "approve_email_start"
+	ApproveByEmailStateValidated workflow.State = "approve_email_validated"
+	ApproveByEmailStatePulled    workflow.State = "approve_email_pulled"
+	ApproveByEmailStateFetched   workflow.State = "approve_email_fetched"
+	ApproveByEmailStateApproved  workflow.State = "approve_email_approved"
+	ApproveByEmailStateComplete  workflow.State = "approve_email_complete"
+
+	ApproveByEmailTriggerValidate workflow.Trigger = "approve_email_validate"
+	ApproveByEmailTriggerPull     workflow.Trigger = "approve_email_pull"
+	ApproveByEmailTriggerFetch    workflow.Trigger = "approve_email_fetch"
+	ApproveByEmailTriggerApprove  workflow.Trigger = "approve_email_approve"
+	ApproveByEmailTriggerComplete workflow.Trigger = "approve_email_complete"
+)
+
+func NewApproveByEmailWorkflow(email, repoPath string, gh github.Client, sh shell.Executor, ui cout.IO) *workflow.Workflow {
+	c := &ApproveByEmailContext{
+		Context: Context{
+			Shell:    sh,
+			UI:       ui,
+			GitHub:   gh,
+			RepoPath: repoPath,
+		},
+		Email: email,
+	}
+
+	w := workflow.New(ApproveByEmailStateStart)
+
+	w.Configure(ApproveByEmailStateStart).
+		Permit(ApproveByEmailTriggerValidate, ApproveByEmailStateValidated)
+
+	w.Configure(ApproveByEmailStateValidated).
+		OnEntryFrom(ApproveByEmailTriggerValidate, entryWithRetry(c.stepValidate())).
+		Permit(ApproveByEmailTriggerPull, ApproveByEmailStatePulled)
+
+	w.Configure(ApproveByEmailStatePulled).
+		OnEntryFrom(ApproveByEmailTriggerPull, entryWithRetry(c.stepPull())).
+		Permit(ApproveByEmailTriggerFetch, ApproveByEmailStateFetched)
+
+	w.Configure(ApproveByEmailStateFetched).
+		OnEntryFrom(ApproveByEmailTriggerFetch, entryWithRetry(c.stepFetchRequests())).
+		Permit(ApproveByEmailTriggerApprove, ApproveByEmailStateApproved)
+
+	w.Configure(ApproveByEmailStateApproved).
+		OnEntryFrom(ApproveByEmailTriggerApprove, entryWithRetry(c.stepApproveAllByEmail())).
+		Permit(ApproveByEmailTriggerComplete, ApproveByEmailStateComplete)
+
+	w.Configure(ApproveByEmailStateComplete)
+
+	w.AddTrigger(ApproveByEmailTriggerValidate)
+	w.AddTrigger(ApproveByEmailTriggerPull)
+	w.AddTrigger(ApproveByEmailTriggerFetch)
+	w.AddTrigger(ApproveByEmailTriggerApprove)
+	w.AddTrigger(ApproveByEmailTriggerComplete)
+
+	return w
 }
 
 func NewApproveWorkflow(uuidPrefix, repoPath string, gh github.Client, sh shell.Executor, ui cout.IO) *workflow.Workflow {
