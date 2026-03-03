@@ -117,6 +117,31 @@ $ kepr review-requests
 
 When `KEPR_HOME` is set, all kepr state (config, GPG home, secrets) will be stored under this directory instead of the system default.
 
+## Releases
+
+To create a new release:
+
+1. Create and push a version tag:
+   ```bash
+   git tag v1.0.0
+   git push --tags
+   ```
+
+2. GitHub Actions will automatically:
+   - Build binaries for Linux (x86_64), macOS (x86_64), and macOS (ARM64)
+   - Create release archives (.tar.gz)
+   - Generate SHA256 checksums
+   - Create a GitHub Release with all artifacts
+
+3. Download binaries from the [GitHub Releases page](https://github.com/gonzaloalvarez/kepr/releases)
+
+To verify downloads:
+```bash
+sha256sum -c checksums.txt
+```
+
+Tags matching `v*` trigger releases (e.g., v1.0.0, v2.1.3-beta, v1.0.0-rc1).
+
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
