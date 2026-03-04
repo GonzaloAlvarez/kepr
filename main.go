@@ -28,7 +28,7 @@ import (
 )
 
 func main() {
-	slog.Info("kepr starting", "version", buildflags.Version, "env", buildflags.Env)
+	slog.Debug("kepr starting", "version", buildflags.Version, "env", buildflags.Env)
 
 	app := &cmd.App{
 		Shell:  &shell.SystemExecutor{},

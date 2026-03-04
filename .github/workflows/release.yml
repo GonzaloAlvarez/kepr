@@ -45,6 +45,8 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
+          GH_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           COMMIT="${{ github.sha }}"
@@ -54,6 +56,12 @@ jobs:
           LDFLAGS="$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/buildflags.Version=$VERSION'"
           LDFLAGS="$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/buildflags.Commit=$COMMIT'"
           LDFLAGS="$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/buildflags.BuildTime=$BUILD_TIME'"
+          if [ -n "$GH_CLIENT_ID" ]; then
+            LDFLAGS="$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/init.githubClientID=$GH_CLIENT_ID'"
+          fi
+          if [ -n "$GH_CLIENT_SECRET" ]; then
+            LDFLAGS="$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/init.githubClientSecret=$GH_CLIENT_SECRET'"
+          fi
 
           go build -ldflags "$LDFLAGS" -o kepr-${{ matrix.platform }} main.go
 

@@ -13,9 +13,9 @@ build:
 	@echo "  Version: $(VERSION)"
 	@echo "  Commit: $(COMMIT)"
 	@echo "  Build Time: $(BUILD_TIME)"
-	@if [ -n "$(GITHUB_CLIENT_ID)" ] && [ -n "$(GITHUB_CLIENT_SECRET)" ]; then \
+	@if [ -n "$(GH_CLIENT_ID)" ] && [ -n "$(GH_CLIENT_SECRET)" ]; then \
 		echo "  Auth Method: PKCE (with custom credentials)"; \
-		echo "  Client ID: $(GITHUB_CLIENT_ID)"; \
+		echo "  Client ID: $(GH_CLIENT_ID)"; \
 		echo "  Client Secret: [REDACTED]"; \
 	else \
 		echo "  Auth Method: Device Code Flow (default client ID)"; \
@@ -25,11 +25,11 @@ build:
 	LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/buildflags.Version=$(VERSION)'"; \
 	LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/buildflags.Commit=$(COMMIT)'"; \
 	LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/buildflags.BuildTime=$(BUILD_TIME)'"; \
-	if [ -n "$(GITHUB_CLIENT_ID)" ]; then \
-		LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/init.githubClientID=$(GITHUB_CLIENT_ID)'"; \
+	if [ -n "$(GH_CLIENT_ID)" ]; then \
+		LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/init.githubClientID=$(GH_CLIENT_ID)'"; \
 	fi; \
-	if [ -n "$(GITHUB_CLIENT_SECRET)" ]; then \
-		LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/init.githubClientSecret=$(GITHUB_CLIENT_SECRET)'"; \
+	if [ -n "$(GH_CLIENT_SECRET)" ]; then \
+		LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/init.githubClientSecret=$(GH_CLIENT_SECRET)'"; \
 	fi; \
 	go build -ldflags "$$LDFLAGS" -o kepr main.go
 	@echo "Build complete: ./kepr"
@@ -40,9 +40,9 @@ dev:
 	@echo "  Version: $(VERSION)-dev"
 	@echo "  Commit: $(COMMIT)"
 	@echo "  Build Time: $(BUILD_TIME)"
-	@if [ -n "$(GITHUB_CLIENT_ID)" ] && [ -n "$(GITHUB_CLIENT_SECRET)" ]; then \
+	@if [ -n "$(GH_CLIENT_ID)" ] && [ -n "$(GH_CLIENT_SECRET)" ]; then \
 		echo "  Auth Method: PKCE (with custom credentials)"; \
-		echo "  Client ID: $(GITHUB_CLIENT_ID)"; \
+		echo "  Client ID: $(GH_CLIENT_ID)"; \
 		echo "  Client Secret: [REDACTED]"; \
 	else \
 		echo "  Auth Method: Device Code Flow (default client ID)"; \
@@ -52,11 +52,11 @@ dev:
 	LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/buildflags.Version=$(VERSION)-dev'"; \
 	LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/buildflags.Commit=$(COMMIT)'"; \
 	LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/buildflags.BuildTime=$(BUILD_TIME)'"; \
-	if [ -n "$(GITHUB_CLIENT_ID)" ]; then \
-		LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/init.githubClientID=$(GITHUB_CLIENT_ID)'"; \
+	if [ -n "$(GH_CLIENT_ID)" ]; then \
+		LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/init.githubClientID=$(GH_CLIENT_ID)'"; \
 	fi; \
-	if [ -n "$(GITHUB_CLIENT_SECRET)" ]; then \
-		LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/init.githubClientSecret=$(GITHUB_CLIENT_SECRET)'"; \
+	if [ -n "$(GH_CLIENT_SECRET)" ]; then \
+		LDFLAGS="$$LDFLAGS -X 'github.com/gonzaloalvarez/kepr/internal/init.githubClientSecret=$(GH_CLIENT_SECRET)'"; \
 	fi; \
 	go build -tags dev -ldflags "$$LDFLAGS" -o kepr main.go
 
