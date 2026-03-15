@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gonzaloalvarez/kepr/pkg/config"
@@ -29,7 +30,7 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func SetupGPG(executor shell.Executor, io cout.IO, headless bool, repoExists bool) (*gpg.GPG, error) {
+func SetupGPG(executor shell.Executor, io cout.IO, secretsPath string, headless bool, repoExists bool) (*gpg.GPG, error) {
 	configDir, err := config.Dir()
 	if err != nil {
 		return nil, err
@@ -48,18 +49,32 @@ func SetupGPG(executor shell.Executor, io cout.IO, headless bool, repoExists boo
 
 	fingerprint := config.GetUserFingerprint()
 	if fingerprint == "" {
-		if repoExists && !headless {
-			slog.Debug("joining existing repository without headless, skipping key generation")
-			io.Infoln("Joined existing repository. Import your GPG keys to decrypt secrets.")
-			return g, nil
-		}
-
 		slog.Debug("no fingerprint found, generating keys")
 		userName := config.GetUserName()
 		userEmail := config.GetUserEmail()
 
 		if userName == "" || userEmail == "" {
 			return nil, fmt.Errorf("user identity not configured")
+		}
+
+		if repoExists && !headless {
+			restoredFP, err := restoreFromYubiKey(g, secretsPath, io)
+			if err != nil {
+				return nil, err
+			}
+			if restoredFP != "" {
+				return g, nil
+			}
+			fingerprint, err = g.GenerateKeys(userName, userEmail)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate keys: %w", err)
+			}
+			if err := config.SaveFingerprint(fingerprint); err != nil {
+				return nil, fmt.Errorf("failed to save fingerprint: %w", err)
+			}
+			io.Successfln("Generated new GPG identity: %s", fingerprint)
+			io.Infoln("Use 'kepr request <path>' to request access to secrets from the store owner.")
+			return g, nil
 		}
 
 		fingerprint, err = g.GenerateKeys(userName, userEmail)
@@ -73,9 +88,7 @@ func SetupGPG(executor shell.Executor, io cout.IO, headless bool, repoExists boo
 			return nil, fmt.Errorf("failed to save fingerprint: %w", err)
 		}
 
-		if repoExists {
-			io.Infoln("Joined existing repository with new GPG identity.")
-		} else if headless {
+		if headless {
 			io.Infoln("Headless mode: master key retained locally (no YubiKey provisioning)")
 		} else {
 			if err := g.BackupMasterKey(fingerprint); err != nil {
@@ -93,6 +106,92 @@ func SetupGPG(executor shell.Executor, io cout.IO, headless bool, repoExists boo
 	}
 
 	return g, nil
+}
+
+func restoreFromYubiKey(g *gpg.GPG, secretsPath string, io cout.IO) (string, error) {
+	if secretsPath == "" {
+		return "", nil
+	}
+
+	keysDir := filepath.Join(secretsPath, "keys")
+	entries, err := os.ReadDir(keysDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to read keys directory: %w", err)
+	}
+
+	if err := g.ReplaceSCDaemonConf(); err != nil {
+		slog.Debug("failed to replace scdaemon.conf", "error", err)
+	}
+	defer func() {
+		if err := g.RevertSCDaemonConf(); err != nil {
+			slog.Debug("failed to revert scdaemon.conf", "error", err)
+		}
+	}()
+
+	y := gpg.NewYubikey(g)
+	y.KillSCDaemon()
+
+	if err := y.ReadCardStatus(); err != nil {
+		slog.Debug("no YubiKey detected during restore attempt", "error", err)
+		return "", nil
+	}
+
+	if y.EncryptionKey == "" {
+		slog.Debug("YubiKey has no encryption key, skipping restore")
+		return "", nil
+	}
+
+	slog.Debug("YubiKey encryption key found, attempting to match repo keys", "encryptionKey", y.EncryptionKey)
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".key") {
+			continue
+		}
+		keyData, err := os.ReadFile(filepath.Join(keysDir, entry.Name()))
+		if err != nil {
+			slog.Debug("failed to read key file", "file", entry.Name(), "error", err)
+			continue
+		}
+		if err := g.ImportPublicKey(keyData); err != nil {
+			slog.Debug("failed to import key", "file", entry.Name(), "error", err)
+			continue
+		}
+	}
+
+	masterFP, err := g.FindMasterKeyBySubkeyFingerprint(y.EncryptionKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to match YubiKey to repo keys: %w", err)
+	}
+	if masterFP == "" {
+		slog.Debug("no repo key matched the YubiKey encryption subkey")
+		return "", nil
+	}
+
+	if err := g.SetUltimateTrust(masterFP); err != nil {
+		return "", fmt.Errorf("failed to set key trust: %w", err)
+	}
+
+	if err := config.SaveFingerprint(masterFP); err != nil {
+		return "", fmt.Errorf("failed to save fingerprint: %w", err)
+	}
+
+	if y.SerialNumber != "" {
+		if err := config.SaveYubikeySerial(y.SerialNumber); err != nil {
+			slog.Warn("failed to save yubikey serial", "error", err)
+		}
+	}
+	if err := config.SaveYubikeyAdminPin(y.AdminPin); err != nil {
+		slog.Warn("failed to save yubikey admin pin", "error", err)
+	}
+	if err := config.SaveYubikeyUserPin(y.UserPin); err != nil {
+		slog.Warn("failed to save yubikey user pin", "error", err)
+	}
+
+	io.Successfln("Restored GPG identity from YubiKey (fingerprint: %s)", masterFP)
+	return masterFP, nil
 }
 
 func initYubikey(g *gpg.GPG, io cout.IO) error {

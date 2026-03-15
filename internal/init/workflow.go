@@ -57,6 +57,10 @@ func NewWorkflow(repoName string, headless bool, gh github.Client, sh shell.Exec
 
 	w.Configure(StateUserInfoFetched).
 		OnEntryFrom(TriggerFetchUserInfo, entryWithRetry(c.stepFetchUserInfo())).
+		Permit(TriggerCloneRepo, StateRepoCloned)
+
+	w.Configure(StateRepoCloned).
+		OnEntryFrom(TriggerCloneRepo, entryWithRetry(c.stepCloneRepo())).
 		Permit(TriggerSetupGPG, StateGPGReady)
 
 	w.Configure(StateGPGReady).
@@ -86,6 +90,7 @@ func NewWorkflow(repoName string, headless bool, gh github.Client, sh shell.Exec
 	w.AddTrigger(TriggerCreateRepo)
 	w.AddTrigger(TriggerSaveConfig)
 	w.AddTrigger(TriggerFetchUserInfo)
+	w.AddTrigger(TriggerCloneRepo)
 	w.AddTrigger(TriggerSetupGPG)
 	w.AddTrigger(TriggerInitStore)
 	w.AddTrigger(TriggerCommit)

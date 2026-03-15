@@ -132,11 +132,32 @@ func (c *Context) stepFetchUserInfo() workflow.StepConfig {
 	}
 }
 
+func (c *Context) stepCloneRepo() workflow.StepConfig {
+	return workflow.StepConfig{
+		Name: "clone_repo",
+		Execute: func(ctx context.Context) error {
+			if !c.RepoExists {
+				return nil
+			}
+			configDir, err := config.Dir()
+			if err != nil {
+				return err
+			}
+			secretsPath, err := config.SecretsPathForRepo(c.RepoPath)
+			if err != nil {
+				return err
+			}
+			c.SecretsPath = secretsPath
+			return ClonePasswordStore(configDir, c.RepoPath, c.Token, c.GitHub, c.UI)
+		},
+	}
+}
+
 func (c *Context) stepSetupGPG() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "setup_gpg",
 		Execute: func(ctx context.Context) error {
-			g, err := SetupGPG(c.Shell, c.UI, c.Headless, c.RepoExists)
+			g, err := SetupGPG(c.Shell, c.UI, c.SecretsPath, c.Headless, c.RepoExists)
 			if err != nil {
 				return err
 			}
@@ -151,12 +172,12 @@ func (c *Context) stepInitStore() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "init_store",
 		Execute: func(ctx context.Context) error {
+			if c.RepoExists {
+				return nil
+			}
 			configDir, err := config.Dir()
 			if err != nil {
 				return err
-			}
-			if c.RepoExists {
-				return ClonePasswordStore(configDir, c.RepoPath, c.Token, c.GitHub, c.UI)
 			}
 			return SetupPasswordStore(configDir, c.RepoPath, c.GPG, c.Fingerprint, c.Shell, c.UI)
 		},

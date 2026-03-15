@@ -119,6 +119,48 @@ func (g *GPG) ExportPublicKey(fingerprint string) ([]byte, error) {
 	return []byte(stdout), nil
 }
 
+func (g *GPG) FindMasterKeyBySubkeyFingerprint(subkeyFP string) (string, error) {
+	stdout, _, err := g.execute("", "--list-keys", "--with-colons")
+	if err != nil {
+		return "", fmt.Errorf("failed to list keys: %w", err)
+	}
+
+	var currentMaster string
+	inSubkey := false
+
+	for _, line := range strings.Split(stdout, "\n") {
+		switch {
+		case strings.HasPrefix(line, "pub:"):
+			inSubkey = false
+			currentMaster = ""
+		case strings.HasPrefix(line, "fpr:") && !inSubkey:
+			fields := strings.Split(line, ":")
+			if len(fields) >= 10 {
+				currentMaster = fields[9]
+			}
+		case strings.HasPrefix(line, "sub:"):
+			inSubkey = true
+		case strings.HasPrefix(line, "fpr:") && inSubkey:
+			fields := strings.Split(line, ":")
+			if len(fields) >= 10 && strings.EqualFold(fields[9], subkeyFP) {
+				return currentMaster, nil
+			}
+			inSubkey = false
+		}
+	}
+
+	return "", nil
+}
+
+func (g *GPG) SetUltimateTrust(fingerprint string) error {
+	trustInput := fmt.Sprintf("%s:6:\n", fingerprint)
+	_, stderr, err := g.execute(trustInput, "--import-ownertrust")
+	if err != nil {
+		return fmt.Errorf("failed to set ultimate trust: %w, stderr: %s", err, stderr)
+	}
+	return nil
+}
+
 func (g *GPG) ImportPublicKey(keyData []byte) error {
 	slog.Debug("importing public key")
 

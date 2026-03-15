@@ -227,6 +227,10 @@ func (y *Yubikey) IsOccupied() bool {
 	return y.SignatureOccupied || y.EncryptionOccupied
 }
 
+func (y *Yubikey) ReadCardStatus() error {
+	return y.checkCardStatus()
+}
+
 func (y *Yubikey) cardEdit(attribute string, values []string, adminPin string) error {
 	baseArgs := []string{"--card-edit"}
 	commands := []string{"admin", attribute}
