@@ -161,6 +161,21 @@ func (g *GPG) SetUltimateTrust(fingerprint string) error {
 	return nil
 }
 
+func (g *GPG) ImportPrivateKey(keyData []byte) (string, error) {
+	_, stderr, err := g.execute(string(keyData), "--import")
+	if err != nil {
+		return "", fmt.Errorf("failed to import private key: %w, stderr: %s", err, stderr)
+	}
+	keys, err := g.ListPublicKeys()
+	if err != nil {
+		return "", fmt.Errorf("failed to list keys after import: %w", err)
+	}
+	if len(keys) == 0 {
+		return "", fmt.Errorf("no key found after import")
+	}
+	return keys[0].Fingerprint, nil
+}
+
 func (g *GPG) ImportPublicKey(keyData []byte) error {
 	slog.Debug("importing public key")
 

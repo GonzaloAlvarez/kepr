@@ -35,6 +35,7 @@ type Context struct {
 	GitHub      github.Client
 	RepoPath    string
 	Headless    bool
+	FromKeyPath string
 	RepoExists  bool
 	Token       string
 	Fingerprint string
@@ -157,7 +158,7 @@ func (c *Context) stepSetupGPG() workflow.StepConfig {
 	return workflow.StepConfig{
 		Name: "setup_gpg",
 		Execute: func(ctx context.Context) error {
-			g, err := SetupGPG(c.Shell, c.UI, c.SecretsPath, c.Headless, c.RepoExists)
+			g, err := SetupGPG(c.Shell, c.UI, c.SecretsPath, c.Headless, c.RepoExists, c.FromKeyPath)
 			if err != nil {
 				return err
 			}

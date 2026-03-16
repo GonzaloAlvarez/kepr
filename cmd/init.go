@@ -27,6 +27,7 @@ import (
 const defaultInitRepoName = "kepr-store"
 
 func NewInitCmd(app *App) *cobra.Command {
+	var fromPK string
 	cmd := &cobra.Command{
 		Use:   "init [repo-name]",
 		Short: "Initialize a new kepr repository",
@@ -40,10 +41,11 @@ func NewInitCmd(app *App) *cobra.Command {
 				}
 			}
 			headless, _ := cmd.Flags().GetBool("headless")
-			w := initialize.NewWorkflow(repoName, headless, app.GitHub, app.Shell, app.UI)
+			w := initialize.NewWorkflow(repoName, headless, fromPK, app.GitHub, app.Shell, app.UI)
 			return w.Run(cmd.Context())
 		},
 	}
 	cmd.Flags().Bool("headless", false, "initialize without YubiKey or browser (for remote/VM environments)")
+	cmd.Flags().StringVar(&fromPK, "from-pk", "", "import existing GPG private key instead of generating (armored .gpg or .asc file)")
 	return cmd
 }

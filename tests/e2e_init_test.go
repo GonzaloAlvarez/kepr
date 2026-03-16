@@ -247,6 +247,98 @@ func TestInit_ExistingRepo(t *testing.T) {
 	}
 }
 
+func TestInit_FromPrivateKey(t *testing.T) {
+	tempDir := t.TempDir()
+
+	keprHome := filepath.Join(tempDir, "kepr")
+	oldKeprHome := os.Getenv("KEPR_HOME")
+	os.Setenv("KEPR_HOME", keprHome)
+	defer func() {
+		if oldKeprHome != "" {
+			os.Setenv("KEPR_HOME", oldKeprHome)
+		} else {
+			os.Unsetenv("KEPR_HOME")
+		}
+	}()
+
+	bareRepoPath := filepath.Join(tempDir, "bare-repo.git")
+	bareRepo, err := gogit.PlainInit(bareRepoPath, true)
+	if err != nil {
+		t.Fatalf("failed to create bare repo: %v", err)
+	}
+	headRef := plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.NewBranchReferenceName("main"))
+	if err := bareRepo.Storer.SetReference(headRef); err != nil {
+		t.Fatalf("failed to set bare repo HEAD: %v", err)
+	}
+
+	fakeKeyPath := filepath.Join(tempDir, "backup.asc")
+	fakeKeyContent := "-----BEGIN PGP PRIVATE KEY BLOCK-----\nfake-private-key-content\n-----END PGP PRIVATE KEY BLOCK-----\n"
+	if err := os.WriteFile(fakeKeyPath, []byte(fakeKeyContent), 0600); err != nil {
+		t.Fatalf("failed to write fake key file: %v", err)
+	}
+
+	mockShell := mocks.NewMockShell()
+	mockUI := mocks.NewMockUI()
+	mockGitHub := mocks.NewMockGitHub("Test User", "test@example.com")
+	mockGitHub.CloneURLs["testrepo"] = "file://" + bareRepoPath
+
+	mockShell.AddResponse("gpg", []string{"--version"}, "gpg (GnuPG) 2.4.0", "", nil)
+	mockShell.AddResponse("git", []string{"--version"}, "git version 2.39.0", "", nil)
+
+	mockShell.AddResponse("/usr/bin/gpg", []string{"--import"}, "", "", nil)
+	mockShell.AddResponse("/usr/bin/gpg", []string{"--list-keys", "--with-colons"},
+		"fpr:::::::::ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234:\nuid:-::::::::Test User <test@example.com>:\n", "", nil)
+	mockShell.AddResponse("/usr/bin/gpg", []string{"--import-ownertrust"}, "", "", nil)
+	mockShell.AddResponse("/usr/bin/gpg", []string{"--armor", "--export", "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234"},
+		"-----BEGIN PGP PUBLIC KEY BLOCK-----\nfake-public-key\n-----END PGP PUBLIC KEY BLOCK-----\n", "", nil)
+
+	mockUI.ConfirmInputs = []bool{true, true, true}
+
+	app := &cmd.App{
+		Shell:  mockShell,
+		UI:     mockUI,
+		GitHub: mockGitHub,
+	}
+
+	rootCmd := cmd.NewRootCmd(app)
+	rootCmd.SetArgs([]string{"init", "--from-pk", fakeKeyPath, "--headless", "testrepo"})
+
+	err = rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if !mockGitHub.AuthCalled {
+		t.Error("expected GitHub authentication to be called")
+	}
+
+	configPath := filepath.Join(keprHome, "config.json")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		t.Errorf("expected config file to exist at %s", configPath)
+	}
+
+	if mockShell.WasCalled("/usr/bin/gpg", "--batch", "--gen-key") {
+		t.Error("gpg key generation should NOT be called when --from-pk is used")
+	}
+
+	if !mockShell.WasCalled("/usr/bin/gpg", "--import") {
+		t.Error("expected gpg --import to be called")
+	}
+
+	output := mockUI.GetOutput()
+	if strings.Contains(output, "BEGIN PGP PRIVATE KEY BLOCK") {
+		t.Error("private key should not be displayed when importing with --from-pk")
+	}
+
+	if !strings.Contains(output, "Imported GPG key") {
+		t.Errorf("expected 'Imported GPG key' message, got: %s", output)
+	}
+
+	if !strings.Contains(output, "Headless mode") {
+		t.Errorf("expected headless mode message, got: %s", output)
+	}
+}
+
 func TestInit_Headless(t *testing.T) {
 	tempDir := t.TempDir()
 

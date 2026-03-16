@@ -30,7 +30,7 @@ import (
 	"github.com/gonzaloalvarez/kepr/pkg/shell"
 )
 
-func SetupGPG(executor shell.Executor, io cout.IO, secretsPath string, headless bool, repoExists bool) (*gpg.GPG, error) {
+func SetupGPG(executor shell.Executor, io cout.IO, secretsPath string, headless bool, repoExists bool, fromKeyPath string) (*gpg.GPG, error) {
 	configDir, err := config.Dir()
 	if err != nil {
 		return nil, err
@@ -52,6 +52,32 @@ func SetupGPG(executor shell.Executor, io cout.IO, secretsPath string, headless 
 		slog.Debug("no fingerprint found, generating keys")
 		userName := config.GetUserName()
 		userEmail := config.GetUserEmail()
+
+		if fromKeyPath != "" {
+			keyData, err := os.ReadFile(fromKeyPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read key file: %w", err)
+			}
+			fingerprint, err = g.ImportPrivateKey(keyData)
+			if err != nil {
+				return nil, fmt.Errorf("failed to import private key: %w", err)
+			}
+			if err := g.SetUltimateTrust(fingerprint); err != nil {
+				return nil, fmt.Errorf("failed to set key trust: %w", err)
+			}
+			if err := config.SaveFingerprint(fingerprint); err != nil {
+				return nil, fmt.Errorf("failed to save fingerprint: %w", err)
+			}
+			io.Successfln("Imported GPG key: %s", fingerprint)
+			if !headless {
+				if err := initYubikey(g, io); err != nil {
+					return nil, err
+				}
+			} else {
+				io.Infoln("Headless mode: encryption subkey retained locally (no YubiKey provisioning)")
+			}
+			return g, nil
+		}
 
 		if userName == "" || userEmail == "" {
 			return nil, fmt.Errorf("user identity not configured")

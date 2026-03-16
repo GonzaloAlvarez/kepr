@@ -24,6 +24,9 @@ jobs:
           - goos: darwin
             goarch: arm64
             platform: darwin-arm64
+          - goos: linux
+            goarch: arm64
+            platform: linux-aarch64
 
     steps:
       - name: Checkout code
